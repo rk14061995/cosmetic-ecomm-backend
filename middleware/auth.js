@@ -1,6 +1,17 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
+const normalizeEmail = (email) => (email || '').trim().toLowerCase();
+const staticAdminEmails = (
+  process.env.STATIC_ADMIN_EMAILS ||
+  process.env.ADMIN_EMAILS ||
+  process.env.ADMIN_EMAIL ||
+  ''
+)
+  .split(',')
+  .map((email) => normalizeEmail(email))
+  .filter(Boolean);
+
 exports.protect = async (req, res, next) => {
   let token;
   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
@@ -21,6 +32,10 @@ exports.protect = async (req, res, next) => {
 };
 
 exports.adminOnly = (req, res, next) => {
-  if (req.user && req.user.role === 'admin') return next();
+  const isStaticAdmin = staticAdminEmails.includes(normalizeEmail(req.user?.email));
+  if (
+    req.user &&
+    (req.user.role === 'admin' || isStaticAdmin)
+  ) return next();
   return res.status(403).json({ success: false, message: 'Admin access required' });
 };

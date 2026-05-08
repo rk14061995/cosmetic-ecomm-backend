@@ -1,9 +1,22 @@
 const Product = require('../models/Product');
+const Category = require('../models/Category');
 const { slugify, getPaginationData } = require('../utils/helpers');
 const { uploadMultipleImages, deleteImage } = require('../services/cloudinaryService');
 
 exports.getProducts = async (req, res) => {
-  const { category, minPrice, maxPrice, rating, search, sort, page = 1, limit = 12, featured } = req.query;
+  const {
+    category,
+    minPrice,
+    maxPrice,
+    rating,
+    search,
+    sort,
+    page = 1,
+    limit = 12,
+    featured,
+    newArrival,
+    bestSeller,
+  } = req.query;
   const query = { isActive: true };
 
   if (category) query.category = category;
@@ -14,6 +27,8 @@ exports.getProducts = async (req, res) => {
   }
   if (rating) query.ratings = { $gte: Number(rating) };
   if (featured) query.isFeatured = true;
+  if (newArrival) query.isNewArrival = true;
+  if (bestSeller) query.isBestSeller = true;
   if (search) query.$text = { $search: search };
 
   const sortMap = {
@@ -56,6 +71,12 @@ exports.getFeaturedProducts = async (req, res) => {
 exports.createProduct = async (req, res) => {
   const data = { ...req.body };
   if (!data.slug) data.slug = slugify(data.name);
+  if (data.category) {
+    const category = await Category.findOne({ name: data.category, isActive: true });
+    if (!category) {
+      return res.status(400).json({ success: false, message: 'Invalid category selected' });
+    }
+  }
 
   if (req.files && req.files.length > 0) {
     data.images = await uploadMultipleImages(req.files, 'cosmetic_web/products');
@@ -68,6 +89,12 @@ exports.createProduct = async (req, res) => {
 exports.updateProduct = async (req, res) => {
   const data = { ...req.body };
   if (data.name && !data.slug) data.slug = slugify(data.name);
+  if (data.category) {
+    const category = await Category.findOne({ name: data.category, isActive: true });
+    if (!category) {
+      return res.status(400).json({ success: false, message: 'Invalid category selected' });
+    }
+  }
 
   const product = await Product.findById(req.params.id);
   if (!product) return res.status(404).json({ success: false, message: 'Product not found' });

@@ -112,7 +112,11 @@ exports.getPaymentLogs = async (req, res) => {
 exports.razorpayWebhook = async (req, res) => {
   const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
   const signature = req.headers['x-razorpay-signature'];
-  const body = JSON.stringify(req.body);
+  if (!webhookSecret) {
+    return res.status(500).json({ success: false, message: 'Webhook secret is not configured' });
+  }
+
+  const body = req.rawBody || JSON.stringify(req.body);
 
   const expectedSignature = crypto.createHmac('sha256', webhookSecret).update(body).digest('hex');
 
@@ -120,7 +124,15 @@ exports.razorpayWebhook = async (req, res) => {
     return res.status(400).json({ success: false, message: 'Invalid webhook signature' });
   }
 
-  const { event, payload } = req.body;
+  let payloadBody = req.body;
+  if (typeof req.body === 'string') {
+    try {
+      payloadBody = JSON.parse(req.body);
+    } catch (_) {
+      return res.status(400).json({ success: false, message: 'Invalid webhook payload' });
+    }
+  }
+  const { event, payload } = payloadBody;
 
   if (event === 'payment.failed') {
     const paymentId = payload.payment.entity.order_id;

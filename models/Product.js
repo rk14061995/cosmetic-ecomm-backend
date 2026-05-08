@@ -23,7 +23,7 @@ const productSchema = new mongoose.Schema(
     category: {
       type: String,
       required: true,
-      enum: ['Skincare', 'Makeup', 'Haircare', 'Fragrance', 'Body Care', 'Tools & Accessories'],
+      trim: true,
     },
     brand: { type: String, required: true },
     images: [
@@ -52,6 +52,8 @@ const productSchema = new mongoose.Schema(
     salePrice: { type: Number, min: 0 },
     saleEndsAt: { type: Date },
     isFeatured: { type: Boolean, default: false },
+    isNewArrival: { type: Boolean, default: false },
+    isBestSeller: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },
     eligibleForMysteryBox: { type: Boolean, default: false },
     frequentlyBoughtWith: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Product' }],

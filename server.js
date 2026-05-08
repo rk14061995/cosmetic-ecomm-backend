@@ -5,9 +5,11 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const connectDB = require('./config/db');
+const { validateEnv } = require('./config/env');
 const errorHandler = require('./middleware/errorHandler');
 const { generalLimiter } = require('./middleware/rateLimiter');
 
+validateEnv();
 connectDB();
 
 const app = express();
@@ -16,10 +18,16 @@ app.use(helmet());
 const allowedOrigins = [
   'http://localhost:3000',
   ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
+  ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map((v) => v.trim()).filter(Boolean) : []),
 ];
+const allowVercelPreview = process.env.ALLOW_VERCEL_PREVIEW === 'true';
 app.use(cors({
   origin: (origin, cb) => {
-    if (!origin || allowedOrigins.includes(origin) || /\.vercel\.app$/.test(origin)) {
+    if (
+      !origin ||
+      allowedOrigins.includes(origin) ||
+      (allowVercelPreview && /\.vercel\.app$/.test(origin))
+    ) {
       cb(null, true);
     } else {
       cb(new Error('Not allowed by CORS'));
@@ -28,7 +36,11 @@ app.use(cors({
   credentials: true,
 }));
 app.use(morgan('dev'));
-app.use(express.json());
+app.use(express.json({
+  verify: (req, _res, buf) => {
+    req.rawBody = buf.toString('utf8');
+  },
+}));
 app.use(express.urlencoded({ extended: true }));
 app.use(generalLimiter);
 
@@ -36,6 +48,7 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Dat
 
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/products', require('./routes/products'));
+app.use('/api/categories', require('./routes/categories'));
 app.use('/api/cart', require('./routes/cart'));
 app.use('/api/orders', require('./routes/orders'));
 app.use('/api/payments', require('./routes/payments'));

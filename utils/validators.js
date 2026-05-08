@@ -20,9 +20,7 @@ exports.productSchema = Joi.object({
   shortDescription: Joi.string().max(300).optional(),
   price: Joi.number().positive().required(),
   discountPrice: Joi.number().positive().optional(),
-  category: Joi.string()
-    .valid('Skincare', 'Makeup', 'Haircare', 'Fragrance', 'Body Care', 'Tools & Accessories')
-    .required(),
+  category: Joi.string().min(2).max(100).required(),
   brand: Joi.string().required(),
   stock: Joi.number().min(0).required(),
   tags: Joi.array().items(Joi.string()).optional(),
@@ -30,6 +28,8 @@ exports.productSchema = Joi.object({
   howToUse: Joi.string().optional(),
   weight: Joi.string().optional(),
   isFeatured: Joi.boolean().optional(),
+  isNewArrival: Joi.boolean().optional(),
+  isBestSeller: Joi.boolean().optional(),
   isActive: Joi.boolean().optional(),
   eligibleForMysteryBox: Joi.boolean().optional(),
 });
@@ -72,6 +72,17 @@ exports.orderSchema = Joi.object({
   paymentMethod: Joi.string().valid('razorpay', 'cod').required(),
   couponCode: Joi.string().optional(),
   walletAmountUsed: Joi.number().min(0).optional(),
+});
+
+exports.createRazorpayOrderSchema = Joi.object({
+  orderId: Joi.string().length(24).hex().required(),
+});
+
+exports.verifyPaymentSchema = Joi.object({
+  orderId: Joi.string().length(24).hex().required(),
+  razorpay_order_id: Joi.string().required(),
+  razorpay_payment_id: Joi.string().required(),
+  razorpay_signature: Joi.string().required(),
 });
 
 exports.validate = (schema) => (req, res, next) => {

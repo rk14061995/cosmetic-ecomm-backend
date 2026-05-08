@@ -1,13 +1,15 @@
 const Order = require('../models/Order');
-const Cart = require('../models/Cart');
 const Product = require('../models/Product');
 const MysteryBox = require('../models/MysteryBox');
 const Coupon = require('../models/Coupon');
 const Referral = require('../models/Referral');
 const User = require('../models/User');
+const Cart = require('../models/Cart');
 const { calculateShipping, getPaginationData } = require('../utils/helpers');
 const { sendOrderConfirmationEmail, sendOrderStatusEmail } = require('../services/emailService');
 const { allocateProducts, deductInventory } = require('../services/mysteryBoxService');
+
+const CANCEL_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 exports.createOrder = async (req, res) => {
   const { shippingAddress, paymentMethod, couponCode, walletAmountUsed = 0 } = req.body;
@@ -174,6 +176,9 @@ exports.cancelOrder = async (req, res) => {
   if (!['Pending', 'Paid'].includes(order.orderStatus)) {
     return res.status(400).json({ success: false, message: 'Order cannot be cancelled at this stage' });
   }
+  if (Date.now() - new Date(order.createdAt).getTime() > CANCEL_WINDOW_MS) {
+    return res.status(400).json({ success: false, message: 'Cancellation window has expired' });
+  }
 
   order.orderStatus = 'Cancelled';
   order.statusHistory.push({ status: 'Cancelled', note: req.body.reason || 'Cancelled by user' });
@@ -187,9 +192,46 @@ exports.cancelOrder = async (req, res) => {
 };
 
 exports.getAllOrders = async (req, res) => {
-  const { page = 1, limit = 20, status, search } = req.query;
+  const { page = 1, limit = 20, status, search, paymentMethod, from, to } = req.query;
   const query = {};
   if (status) query.orderStatus = status;
+  if (paymentMethod) query.paymentMethod = paymentMethod;
+
+  if (from || to) {
+    query.createdAt = {};
+    if (from) query.createdAt.$gte = new Date(from);
+    if (to) {
+      const toDate = new Date(to);
+      toDate.setHours(23, 59, 59, 999);
+      query.createdAt.$lte = toDate;
+    }
+  }
+
+  if (search && String(search).trim()) {
+    const term = String(search).trim();
+    const regex = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    const orClauses = [
+      { couponCode: regex },
+      { trackingNumber: regex },
+      { 'shippingAddress.fullName': regex },
+      { 'shippingAddress.phone': regex },
+    ];
+
+    // Allow search by order id (full id or short trailing id in UI)
+    if (/^[a-fA-F0-9]{24}$/.test(term)) {
+      orClauses.push({ _id: term });
+    }
+
+    // Search by customer email/name via user lookup.
+    const matchingUsers = await User.find({
+      $or: [{ email: regex }, { name: regex }, { phone: regex }],
+    }).select('_id');
+    if (matchingUsers.length > 0) {
+      orClauses.push({ user: { $in: matchingUsers.map((u) => u._id) } });
+    }
+
+    query.$or = orClauses;
+  }
 
   const total = await Order.countDocuments(query);
   const pagination = getPaginationData(page, limit, total);
@@ -201,6 +243,47 @@ exports.getAllOrders = async (req, res) => {
     .limit(pagination.pageSize);
 
   res.json({ success: true, orders, pagination });
+};
+
+exports.exportOrdersCsv = async (req, res) => {
+  const { status, paymentMethod, from, to } = req.query;
+  const query = {};
+  if (status) query.orderStatus = status;
+  if (paymentMethod) query.paymentMethod = paymentMethod;
+  if (from || to) {
+    query.createdAt = {};
+    if (from) query.createdAt.$gte = new Date(from);
+    if (to) {
+      const toDate = new Date(to);
+      toDate.setHours(23, 59, 59, 999);
+      query.createdAt.$lte = toDate;
+    }
+  }
+
+  const orders = await Order.find(query).populate('user', 'name email phone').sort({ createdAt: -1 });
+  const rows = [
+    ['orderId', 'date', 'customerName', 'customerEmail', 'phone', 'items', 'totalPrice', 'paymentMethod', 'status', 'trackingNumber'],
+    ...orders.map((o) => [
+      String(o._id),
+      new Date(o.createdAt).toISOString(),
+      o.user?.name || '',
+      o.user?.email || '',
+      o.shippingAddress?.phone || o.user?.phone || '',
+      o.orderItems?.length || 0,
+      o.totalPrice || 0,
+      o.paymentMethod || '',
+      o.orderStatus || '',
+      o.trackingNumber || '',
+    ]),
+  ];
+
+  const csv = rows
+    .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','))
+    .join('\n');
+
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', `attachment; filename="orders-${Date.now()}.csv"`);
+  res.status(200).send(csv);
 };
 
 exports.updateOrderStatus = async (req, res) => {
@@ -221,6 +304,12 @@ exports.updateOrderStatus = async (req, res) => {
     return res.status(400).json({
       success: false,
       message: `Cannot transition from ${order.orderStatus} to ${status}`,
+    });
+  }
+  if (status === 'Shipped' && !trackingNumber && !order.trackingNumber) {
+    return res.status(400).json({
+      success: false,
+      message: 'Tracking number is required when marking order as Shipped',
     });
   }
 
