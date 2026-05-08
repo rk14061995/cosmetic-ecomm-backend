@@ -6,6 +6,7 @@ const { uploadMultipleImages, deleteImage } = require('../services/cloudinarySer
 exports.getProducts = async (req, res) => {
   const {
     category,
+    brand,
     minPrice,
     maxPrice,
     rating,
@@ -20,6 +21,7 @@ exports.getProducts = async (req, res) => {
   const query = { isActive: true };
 
   if (category) query.category = category;
+  if (brand) query.brand = new RegExp(`^${String(brand).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
   if (minPrice || maxPrice) {
     query.price = {};
     if (minPrice) query.price.$gte = Number(minPrice);

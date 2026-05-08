@@ -6,6 +6,8 @@ const User = require('../models/User');
 const Product = require('../models/Product');
 const MysteryBox = require('../models/MysteryBox');
 const Coupon = require('../models/Coupon');
+const Category = require('../models/Category');
+const Bundle = require('../models/Bundle');
 
 const products = [
   {
@@ -24,6 +26,8 @@ const products = [
     howToUse: 'Apply 3-4 drops to cleansed face every morning. Follow with moisturizer and SPF.',
     weight: '30ml',
     isFeatured: true,
+    isNewArrival: true,
+    isBestSeller: true,
     isActive: true,
     eligibleForMysteryBox: true,
   },
@@ -41,6 +45,8 @@ const products = [
     tags: ['moisturizer', 'spf', 'hydrating', 'daily'],
     weight: '50g',
     isFeatured: true,
+    isNewArrival: true,
+    isBestSeller: true,
     isActive: true,
     eligibleForMysteryBox: true,
   },
@@ -58,6 +64,8 @@ const products = [
     tags: ['lip balm', 'tinted', 'moisture', 'lips'],
     weight: '3x4g',
     isFeatured: true,
+    isNewArrival: false,
+    isBestSeller: true,
     isActive: true,
     eligibleForMysteryBox: true,
   },
@@ -75,6 +83,8 @@ const products = [
     tags: ['retinol', 'anti-aging', 'night cream', 'wrinkles'],
     weight: '50g',
     isFeatured: true,
+    isNewArrival: true,
+    isBestSeller: false,
     isActive: true,
     eligibleForMysteryBox: false,
   },
@@ -92,6 +102,8 @@ const products = [
     tags: ['hair mask', 'argan oil', 'repair', 'frizz'],
     weight: '200g',
     isFeatured: false,
+    isNewArrival: false,
+    isBestSeller: true,
     isActive: true,
     eligibleForMysteryBox: true,
   },
@@ -109,6 +121,8 @@ const products = [
     tags: ['perfume', 'rose', 'oud', 'fragrance'],
     weight: '50ml',
     isFeatured: true,
+    isNewArrival: true,
+    isBestSeller: false,
     isActive: true,
     eligibleForMysteryBox: false,
   },
@@ -126,6 +140,8 @@ const products = [
     tags: ['scrub', 'coffee', 'exfoliant', 'body care'],
     weight: '200g',
     isFeatured: false,
+    isNewArrival: false,
+    isBestSeller: true,
     isActive: true,
     eligibleForMysteryBox: true,
   },
@@ -142,9 +158,20 @@ const products = [
     stock: 80,
     tags: ['brushes', 'makeup tools', 'set', 'professional'],
     isFeatured: true,
+    isNewArrival: true,
+    isBestSeller: true,
     isActive: true,
     eligibleForMysteryBox: false,
   },
+];
+
+const categories = [
+  { name: 'Skincare', slug: 'skincare', description: 'Daily skin essentials', sortOrder: 1, isActive: true },
+  { name: 'Makeup', slug: 'makeup', description: 'Face, lips and eyes', sortOrder: 2, isActive: true },
+  { name: 'Haircare', slug: 'haircare', description: 'Repair and styling products', sortOrder: 3, isActive: true },
+  { name: 'Fragrance', slug: 'fragrance', description: 'Perfumes and mists', sortOrder: 4, isActive: true },
+  { name: 'Body Care', slug: 'body-care', description: 'Body scrubs and lotions', sortOrder: 5, isActive: true },
+  { name: 'Tools & Accessories', slug: 'tools-and-accessories', description: 'Brushes and tools', sortOrder: 6, isActive: true },
 ];
 
 const coupons = [
@@ -195,11 +222,18 @@ const seedDB = async () => {
       Product.deleteMany({}),
       MysteryBox.deleteMany({}),
       Coupon.deleteMany({}),
+      Category.deleteMany({}),
+      Bundle.deleteMany({}),
     ]);
     console.log('Cleared existing data');
 
+    const createdCategories = await Category.insertMany(categories);
+    console.log(`Created ${createdCategories.length} categories`);
+
     const createdProducts = await Product.insertMany(products);
     console.log(`Created ${createdProducts.length} products`);
+
+    const productBySlug = new Map(createdProducts.map((p) => [p.slug, p]));
 
     await Coupon.insertMany(coupons);
     console.log(`Created ${coupons.length} coupons`);
@@ -270,6 +304,41 @@ const seedDB = async () => {
       },
     ]);
     console.log('Created 3 mystery boxes');
+
+    await Bundle.insertMany([
+      {
+        name: 'Radiance Starter Bundle',
+        slug: 'radiance-starter-bundle',
+        description: 'Brightening and hydration essentials for daily use.',
+        products: [
+          { product: productBySlug.get('vitamin-c-brightening-serum')._id, quantity: 1 },
+          { product: productBySlug.get('hydra-glow-moisturizer-spf-50')._id, quantity: 1 },
+          { product: productBySlug.get('coffee-body-scrub')._id, quantity: 1 },
+        ],
+        originalPrice: 2797,
+        bundlePrice: 2199,
+        image: 'https://images.unsplash.com/photo-1522338242992-e1a54906a8da?w=600',
+        stock: 120,
+        isActive: true,
+        tag: 'Bestseller',
+      },
+      {
+        name: 'Glow Makeup Bundle',
+        slug: 'glow-makeup-bundle',
+        description: 'Complete lip and brush combo for everyday glam.',
+        products: [
+          { product: productBySlug.get('rose-petal-lip-balm-collection')._id, quantity: 1 },
+          { product: productBySlug.get('pro-makeup-brush-set-12pc')._id, quantity: 1 },
+        ],
+        originalPrice: 1698,
+        bundlePrice: 1299,
+        image: 'https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=600',
+        stock: 90,
+        isActive: true,
+        tag: 'Limited',
+      },
+    ]);
+    console.log('Created 2 bundles');
 
     const hashedPassword = await bcrypt.hash('Admin@123', 12);
     const existingAdmin = await User.findOne({ email: 'admin@cosmeticweb.com' });

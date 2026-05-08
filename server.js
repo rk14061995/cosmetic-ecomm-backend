@@ -36,13 +36,22 @@ const allowedOrigins = [
   .filter(Boolean);
 
 const allowVercelPreview = process.env.ALLOW_VERCEL_PREVIEW === 'true';
+const allowAllOrigins = process.env.ALLOW_ALL_ORIGINS === 'true';
+const allowHttpsOrigins = process.env.ALLOW_HTTPS_ORIGINS !== 'false';
 app.use(cors({
   origin: (origin, cb) => {
     const normalizedOrigin = normalizeOrigin(origin);
+    const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(normalizedOrigin);
+    const isVercel = /^https:\/\/[a-zA-Z0-9-]+\.vercel\.app$/.test(normalizedOrigin);
+    const isHttpsOrigin = /^https:\/\/.+/.test(normalizedOrigin);
     if (
+      allowAllOrigins ||
       !origin ||
+      isLocalhost ||
+      (allowHttpsOrigins && isHttpsOrigin) ||
       allowedOrigins.includes(normalizedOrigin) ||
-      (allowVercelPreview && /^https:\/\/[a-zA-Z0-9-]+\.vercel\.app$/.test(normalizedOrigin))
+      isVercel ||
+      (allowVercelPreview && isVercel)
     ) {
       cb(null, true);
     } else {
