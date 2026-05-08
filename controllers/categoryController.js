@@ -1,5 +1,21 @@
 const Category = require('../models/Category');
 const { slugify } = require('../utils/helpers');
+const { uploadImage, deleteImage } = require('../services/cloudinaryService');
+const toBoolean = (value, fallback = true) => {
+  if (value === undefined || value === null) return fallback;
+  if (typeof value === 'boolean') return value;
+  return String(value).toLowerCase() === 'true';
+};
+const cloudinaryPublicIdFromUrl = (url) => {
+  const value = String(url || '');
+  const marker = '/upload/';
+  const index = value.indexOf(marker);
+  if (index === -1) return null;
+  const pathPart = value.slice(index + marker.length);
+  const withoutVersion = pathPart.replace(/^v\d+\//, '');
+  const publicId = withoutVersion.replace(/\.[^/.]+$/, '');
+  return publicId || null;
+};
 
 exports.getCategories = async (req, res) => {
   const { includeInactive } = req.query;
@@ -24,9 +40,16 @@ exports.createCategory = async (req, res) => {
     name: normalizedName,
     slug: slugify(normalizedName),
     description,
+    image: '',
     sortOrder: Number(sortOrder) || 0,
-    isActive: Boolean(isActive),
+    isActive: toBoolean(isActive, true),
   });
+
+  if (req.file) {
+    const uploaded = await uploadImage(req.file.buffer, 'cosmetic_web/categories');
+    category.image = uploaded.url;
+    await category.save();
+  }
 
   res.status(201).json({ success: true, category });
 };
@@ -49,7 +72,17 @@ exports.updateCategory = async (req, res) => {
   category.slug = slugify(nextName);
   if (req.body.description !== undefined) category.description = req.body.description;
   if (req.body.sortOrder !== undefined) category.sortOrder = Number(req.body.sortOrder) || 0;
-  if (req.body.isActive !== undefined) category.isActive = Boolean(req.body.isActive);
+  if (req.body.isActive !== undefined) category.isActive = toBoolean(req.body.isActive, category.isActive);
+  if (req.file) {
+    const previousPublicId = cloudinaryPublicIdFromUrl(category.image);
+    const uploaded = await uploadImage(req.file.buffer, 'cosmetic_web/categories');
+    if (previousPublicId) {
+      try {
+        await deleteImage(previousPublicId);
+      } catch (_) {}
+    }
+    category.image = uploaded.url;
+  }
   await category.save();
 
   res.json({ success: true, category });
@@ -58,6 +91,12 @@ exports.updateCategory = async (req, res) => {
 exports.deleteCategory = async (req, res) => {
   const category = await Category.findById(req.params.id);
   if (!category) return res.status(404).json({ success: false, message: 'Category not found' });
+  const publicId = cloudinaryPublicIdFromUrl(category.image);
+  if (publicId) {
+    try {
+      await deleteImage(publicId);
+    } catch (_) {}
+  }
   await category.deleteOne();
   res.json({ success: true, message: 'Category deleted' });
 };

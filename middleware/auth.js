@@ -32,10 +32,8 @@ exports.protect = async (req, res, next) => {
 };
 
 exports.adminOnly = (req, res, next) => {
-  const isStaticAdmin = staticAdminEmails.includes(normalizeEmail(req.user?.email));
-  if (
-    req.user &&
-    (req.user.role === 'admin' || isStaticAdmin)
-  ) return next();
+  // Mobile-first single-operator mode: any authenticated user can access admin APIs.
+  // Keep this enabled only when you intentionally want app-only admin access.
+  if (req.user) return next();
   return res.status(403).json({ success: false, message: 'Admin access required' });
 };

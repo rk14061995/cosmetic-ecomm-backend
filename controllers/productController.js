@@ -17,8 +17,9 @@ exports.getProducts = async (req, res) => {
     featured,
     newArrival,
     bestSeller,
+    includeInactive,
   } = req.query;
-  const query = { isActive: true };
+  const query = includeInactive === 'true' ? {} : { isActive: true };
 
   if (category) query.category = category;
   if (brand) query.brand = new RegExp(`^${String(brand).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
