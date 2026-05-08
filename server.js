@@ -15,18 +15,34 @@ connectDB();
 const app = express();
 
 app.use(helmet());
+const normalizeOrigin = (value) => {
+  if (!value) return '';
+  try {
+    const parsed = new URL(String(value).trim());
+    return `${parsed.protocol}//${parsed.host}`;
+  } catch {
+    return String(value).trim().replace(/\/+$/, '');
+  }
+};
+
 const allowedOrigins = [
   'http://localhost:3000',
-  ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
-  ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map((v) => v.trim()).filter(Boolean) : []),
-];
+  process.env.FRONTEND_URL,
+  ...(process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',').map((v) => v.trim()).filter(Boolean)
+    : []),
+]
+  .map(normalizeOrigin)
+  .filter(Boolean);
+
 const allowVercelPreview = process.env.ALLOW_VERCEL_PREVIEW === 'true';
 app.use(cors({
   origin: (origin, cb) => {
+    const normalizedOrigin = normalizeOrigin(origin);
     if (
       !origin ||
-      allowedOrigins.includes(origin) ||
-      (allowVercelPreview && /\.vercel\.app$/.test(origin))
+      allowedOrigins.includes(normalizedOrigin) ||
+      (allowVercelPreview && /^https:\/\/[a-zA-Z0-9-]+\.vercel\.app$/.test(normalizedOrigin))
     ) {
       cb(null, true);
     } else {
