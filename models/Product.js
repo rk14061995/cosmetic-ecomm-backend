@@ -56,6 +56,10 @@ const productSchema = new mongoose.Schema(
     isBestSeller: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },
     eligibleForMysteryBox: { type: Boolean, default: false },
+    /** When true, PDP shows “Try on yourself” — client-side preview only (no server upload). */
+    virtualTryOn: { type: Boolean, default: false },
+    /** Hex colour used for the soft tint overlay (e.g. lipstick / blush). */
+    tryOnTintHex: { type: String, default: '#db2777', trim: true },
     frequentlyBoughtWith: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Product' }],
   },
   { timestamps: true }

@@ -43,6 +43,11 @@ exports.productSchema = Joi.object({
   isBestSeller: Joi.boolean().optional(),
   isActive: Joi.boolean().optional(),
   eligibleForMysteryBox: Joi.boolean().optional(),
+  virtualTryOn: Joi.boolean().optional(),
+  tryOnTintHex: Joi.string()
+    .pattern(/^#[0-9A-Fa-f]{6}$/)
+    .optional()
+    .allow(''),
 });
 
 exports.couponSchema = Joi.object({

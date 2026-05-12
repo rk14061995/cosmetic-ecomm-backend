@@ -3,6 +3,22 @@ const Category = require('../models/Category');
 const { slugify, getPaginationData } = require('../utils/helpers');
 const { uploadMultipleImages, deleteImage } = require('../services/cloudinaryService');
 
+const BOOLEAN_FORM_FIELDS = [
+  'isFeatured',
+  'isNewArrival',
+  'isBestSeller',
+  'isActive',
+  'eligibleForMysteryBox',
+  'virtualTryOn',
+];
+
+function coerceBooleanFormFields(obj) {
+  for (const k of BOOLEAN_FORM_FIELDS) {
+    if (obj[k] === 'true' || obj[k] === true) obj[k] = true;
+    else if (obj[k] === 'false' || obj[k] === false) obj[k] = false;
+  }
+}
+
 exports.getProducts = async (req, res) => {
   const {
     category,
@@ -126,6 +142,7 @@ exports.getFeaturedProducts = async (req, res) => {
 
 exports.createProduct = async (req, res) => {
   const data = { ...req.body };
+  coerceBooleanFormFields(data);
   if (!data.slug) data.slug = slugify(data.name);
   if (data.category) {
     const category = await Category.findOne({ name: data.category, isActive: true });
@@ -144,6 +161,7 @@ exports.createProduct = async (req, res) => {
 
 exports.updateProduct = async (req, res) => {
   const data = { ...req.body };
+  coerceBooleanFormFields(data);
   delete data.existingImagesJson;
 
   const shouldReplaceImages =
