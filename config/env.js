@@ -4,9 +4,9 @@ const requiredInProd = [
   'JWT_REFRESH_SECRET',
   'RAZORPAY_KEY_ID',
   'RAZORPAY_KEY_SECRET',
-  'MSG91_AUTH_KEY',
-  'MSG91_TEMPLATE_ID',
 ];
+
+// MSG91 is optional: phone OTP routes fail at runtime with a clear error if SMS is used without keys.
 
 function validateEnv() {
   if (process.env.NODE_ENV !== 'production') return;
