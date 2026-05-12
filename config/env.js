@@ -6,7 +6,7 @@ const requiredInProd = [
   'RAZORPAY_KEY_SECRET',
 ];
 
-// MSG91 is optional: phone OTP routes fail at runtime with a clear error if SMS is used without keys.
+// MSG91: integration commented out (smsService, OTP routes, OtpVerification model). Not required at boot.
 
 function validateEnv() {
   if (process.env.NODE_ENV !== 'production') return;

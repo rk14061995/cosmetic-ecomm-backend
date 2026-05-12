@@ -68,22 +68,21 @@ exports.login = async (req, res) => {
   sendTokenResponse(user, 200, res);
 };
 
-exports.sendOtp = async (req, res) => {
-  // OTP flow is intentionally disabled for now.
-  return res.status(503).json({
-    success: false,
-    message: 'OTP service is temporarily disabled',
-  });
-};
-
-exports.verifyOtp = async (req, res) => {
-  // OTP flow is intentionally disabled for now.
-  return res.json({
-    success: false,
-    verified: false,
-    message: 'OTP verification is temporarily disabled',
-  });
-};
+// ─── MSG91 / phone OTP (disabled) ─────────────────────────────────────────────
+// exports.sendOtp = async (req, res) => {
+//   return res.status(503).json({
+//     success: false,
+//     message: 'OTP service is temporarily disabled',
+//   });
+// };
+//
+// exports.verifyOtp = async (req, res) => {
+//   return res.json({
+//     success: false,
+//     verified: false,
+//     message: 'OTP verification is temporarily disabled',
+//   });
+// };
 
 exports.logout = async (req, res) => {
   await User.findByIdAndUpdate(req.user._id, { refreshToken: null });
