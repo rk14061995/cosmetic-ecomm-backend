@@ -13,6 +13,17 @@ exports.loginSchema = Joi.object({
   password: Joi.string().required(),
 });
 
+exports.sendOtpSchema = Joi.object({
+  phone: Joi.string().pattern(/^[6-9]\d{9}$/).required(),
+  purpose: Joi.string().valid('login', 'register', 'checkout').optional(),
+});
+
+exports.verifyOtpSchema = Joi.object({
+  phone: Joi.string().pattern(/^[6-9]\d{9}$/).required(),
+  otp: Joi.string().pattern(/^\d{4,8}$/).required(),
+  purpose: Joi.string().valid('login', 'register', 'checkout').optional(),
+});
+
 exports.productSchema = Joi.object({
   name: Joi.string().min(2).max(200).required(),
   slug: Joi.string().optional(),

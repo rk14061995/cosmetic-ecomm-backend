@@ -55,13 +55,66 @@ exports.getProducts = async (req, res) => {
 };
 
 exports.getProduct = async (req, res) => {
-  const product = await Product.findOne({
-    $or: [{ _id: req.params.id }, { slug: req.params.id }],
-    isActive: true,
-  }).populate('reviews.user', 'name avatar');
+  const raw = String(req.params.id || '').trim();
+  if (!raw) return res.status(400).json({ success: false, message: 'Product id required' });
 
-  if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
-  res.json({ success: true, product });
+  // Slug URLs must not be passed to _id — Mongoose throws CastError and the global handler returns "Resource not found".
+  const isObjectId = /^[a-fA-F0-9]{24}$/.test(raw);
+  const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  try {
+    let filter = isObjectId
+      ? { isActive: true, $or: [{ _id: raw }, { slug: raw }] }
+      : { isActive: true, slug: raw };
+
+    let product = await Product.findOne(filter);
+
+    if (!product && !isObjectId) {
+      product = await Product.findOne({
+        isActive: true,
+        slug: { $regex: new RegExp(`^${escapeRegex(raw)}$`, 'i') },
+      });
+    }
+
+    // Title-style URLs or slug drift (e.g. "Glowzy Beauty Blender" vs stored slug)
+    if (!product && !isObjectId) {
+      let decoded = raw;
+      try {
+        decoded = decodeURIComponent(String(raw).replace(/\+/g, ' '));
+      } catch (_) {
+        /* keep raw */
+      }
+      decoded = decoded.trim();
+      const slugCandidates = [...new Set([slugify(decoded), slugify(raw)].filter(Boolean))];
+      for (const s of slugCandidates) {
+        if (!s) continue;
+        product = await Product.findOne({ isActive: true, slug: s });
+        if (product) break;
+      }
+      if (!product && decoded.length >= 2) {
+        product = await Product.findOne({
+          isActive: true,
+          name: { $regex: new RegExp(`^${escapeRegex(decoded)}$`, 'i') },
+        });
+      }
+    }
+
+    if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
+
+    // Bad review.user refs cause CastError on populate and bubble as "Resource not found" — skip populate for those.
+    try {
+      await product.populate('reviews.user', 'name avatar');
+    } catch (popErr) {
+      if (popErr.name !== 'CastError') throw popErr;
+    }
+
+    return res.json({ success: true, product });
+  } catch (err) {
+    if (err.name === 'CastError') {
+      return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+    return res.status(500).json({ success: false, message: 'Failed to load product' });
+  }
 };
 
 exports.getFeaturedProducts = async (req, res) => {
@@ -91,6 +144,11 @@ exports.createProduct = async (req, res) => {
 
 exports.updateProduct = async (req, res) => {
   const data = { ...req.body };
+  delete data.existingImagesJson;
+
+  const shouldReplaceImages =
+    String(req.body?.replaceImages || '').toLowerCase() === 'true' ||
+    req.body?.replaceImages === true;
   if (data.name && !data.slug) data.slug = slugify(data.name);
   if (data.category) {
     const category = await Category.findOne({ name: data.category, isActive: true });
@@ -102,9 +160,41 @@ exports.updateProduct = async (req, res) => {
   const product = await Product.findById(req.params.id);
   if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
 
+  /** Ordered existing images from admin (JSON array of { url, publicId? }) — allows reorder without re-uploading */
+  let orderedExisting = null;
+  if (req.body.existingImagesJson != null && req.body.existingImagesJson !== '') {
+    try {
+      const parsed = JSON.parse(req.body.existingImagesJson);
+      if (Array.isArray(parsed) && parsed.every((x) => x && typeof x.url === 'string')) {
+        orderedExisting = parsed.map((x) => {
+          const o = { url: x.url };
+          if (x.publicId) o.publicId = x.publicId;
+          return o;
+        });
+      }
+    } catch (_) {
+      /* ignore invalid JSON */
+    }
+  }
+  if (orderedExisting !== null) {
+    data.images = orderedExisting;
+  }
+
   if (req.files && req.files.length > 0) {
     const newImages = await uploadMultipleImages(req.files, 'cosmetic_web/products');
-    data.images = [...(product.images || []), ...newImages];
+    if (shouldReplaceImages) {
+      for (const image of product.images || []) {
+        if (image.publicId) {
+          try {
+            await deleteImage(image.publicId);
+          } catch (_) {}
+        }
+      }
+      data.images = newImages;
+    } else {
+      const base = data.images !== undefined ? data.images : (product.images || []);
+      data.images = [...base, ...newImages];
+    }
   }
 
   const updated = await Product.findByIdAndUpdate(req.params.id, data, {

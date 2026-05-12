@@ -2,8 +2,10 @@ const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Referral = require('../models/Referral');
+// const OtpVerification = require('../models/OtpVerification');
 const { generateTokens, generateResetToken } = require('../utils/helpers');
 const { sendPasswordResetEmail } = require('../services/emailService');
+// const { sendOtpSms, normalizeIndianMobile, OTP_EXPIRY_MINUTES } = require('../services/smsService');
 
 const sendTokenResponse = (user, statusCode, res) => {
   const { accessToken, refreshToken } = generateTokens(user._id);
@@ -64,6 +66,23 @@ exports.login = async (req, res) => {
   }
 
   sendTokenResponse(user, 200, res);
+};
+
+exports.sendOtp = async (req, res) => {
+  // OTP flow is intentionally disabled for now.
+  return res.status(503).json({
+    success: false,
+    message: 'OTP service is temporarily disabled',
+  });
+};
+
+exports.verifyOtp = async (req, res) => {
+  // OTP flow is intentionally disabled for now.
+  return res.json({
+    success: false,
+    verified: false,
+    message: 'OTP verification is temporarily disabled',
+  });
 };
 
 exports.logout = async (req, res) => {

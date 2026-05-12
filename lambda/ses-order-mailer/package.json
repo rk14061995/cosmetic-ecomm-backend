@@ -1,0 +1,9 @@
+{
+  "name": "ses-order-mailer-lambda",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@aws-sdk/client-sesv2": "^3.908.0"
+  }
+}

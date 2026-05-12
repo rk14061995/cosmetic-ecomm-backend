@@ -4,6 +4,8 @@ const requiredInProd = [
   'JWT_REFRESH_SECRET',
   'RAZORPAY_KEY_ID',
   'RAZORPAY_KEY_SECRET',
+  'MSG91_AUTH_KEY',
+  'MSG91_TEMPLATE_ID',
 ];
 
 function validateEnv() {
