@@ -38,28 +38,70 @@ const allowedOrigins = [
 const allowVercelPreview = process.env.ALLOW_VERCEL_PREVIEW === 'true';
 const allowAllOrigins = process.env.ALLOW_ALL_ORIGINS === 'true';
 const allowHttpsOrigins = process.env.ALLOW_HTTPS_ORIGINS !== 'false';
-app.use(cors({
-  origin: (origin, cb) => {
-    const normalizedOrigin = normalizeOrigin(origin);
-    const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(normalizedOrigin);
-    const isVercel = /^https:\/\/[a-zA-Z0-9-]+\.vercel\.app$/.test(normalizedOrigin);
-    const isHttpsOrigin = /^https:\/\/.+/.test(normalizedOrigin);
-    if (
-      allowAllOrigins ||
-      !origin ||
-      isLocalhost ||
-      (allowHttpsOrigins && isHttpsOrigin) ||
-      allowedOrigins.includes(normalizedOrigin) ||
-      isVercel ||
-      (allowVercelPreview && isVercel)
-    ) {
-      cb(null, true);
-    } else {
-      cb(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,
-}));
+const isProduction = process.env.NODE_ENV === 'production';
+
+/** Private LAN / machine hostnames (common when testing from another device on the same network). */
+function isPrivateNetworkOrigin(o) {
+  if (!o) return false;
+  return (
+    /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(o) ||
+    /^https?:\/\/192\.168\.\d{1,3}\.\d{1,3}(:\d+)?$/i.test(o) ||
+    /^https?:\/\/10\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?$/i.test(o) ||
+    /^https?:\/\/172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}(:\d+)?$/i.test(o) ||
+    /^https?:\/\/[^/]+\.local(:\d+)?$/i.test(o)
+  );
+}
+
+/** Vercel production + preview hosts (multi-label subdomains). */
+function isVercelHost(o) {
+  if (!o) return false;
+  return /^https:\/\/[a-z0-9]([a-z0-9.-]*[a-z0-9])?\.vercel\.app$/i.test(o);
+}
+
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      if (allowAllOrigins) {
+        return cb(null, true);
+      }
+      // Same-origin / curl / some mobile WebViews send no Origin
+      if (!origin) {
+        return cb(null, true);
+      }
+
+      const normalizedOrigin = normalizeOrigin(origin);
+
+      const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(normalizedOrigin);
+      const isVercel = isVercelHost(normalizedOrigin);
+      const isHttpsOrigin = /^https:\/\/.+/i.test(normalizedOrigin);
+      const onLan = isPrivateNetworkOrigin(normalizedOrigin);
+
+      if (
+        isLocalhost ||
+        onLan ||
+        (allowHttpsOrigins && isHttpsOrigin) ||
+        allowedOrigins.includes(normalizedOrigin) ||
+        isVercel ||
+        (allowVercelPreview && isVercel)
+      ) {
+        return cb(null, true);
+      }
+
+      // Non-production: avoid locking out local setups (unknown host, tunnel, etc.)
+      if (!isProduction) {
+        return cb(null, true);
+      }
+
+      // Production: deny without throwing — throwing can confuse browsers' CORS diagnostics
+      console.warn(`[CORS] Blocked origin: ${origin}. Set FRONTEND_URL or ALLOWED_ORIGINS (or ALLOW_HTTPS_ORIGINS=true).`);
+      return cb(null, false);
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    optionsSuccessStatus: 204,
+  })
+);
 app.use(morgan('dev'));
 app.use(express.json({
   verify: (req, _res, buf) => {
