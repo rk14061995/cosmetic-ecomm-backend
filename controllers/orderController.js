@@ -8,6 +8,7 @@ const Cart = require('../models/Cart');
 const { calculateShipping, getPaginationData } = require('../utils/helpers');
 const { sendOrderConfirmationEmail, sendOrderStatusEmail } = require('../services/emailService');
 const { allocateProducts, deductInventory } = require('../services/mysteryBoxService');
+const { ensureOrderInvoice } = require('../services/invoiceService');
 
 const CANCEL_WINDOW_MS = 24 * 60 * 60 * 1000;
 
@@ -168,6 +169,32 @@ exports.getOrder = async (req, res) => {
   const order = await Order.findOne({ _id: req.params.id, user: req.user._id });
   if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
   res.json({ success: true, order });
+};
+
+exports.getOrderInvoice = async (req, res) => {
+  const order = await Order.findOne({ _id: req.params.id, user: req.user._id });
+  if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+  if (!order.isPaid) return res.status(400).json({ success: false, message: 'Invoice is available only for paid orders' });
+
+  const user = await User.findById(req.user._id).select('name email');
+  const invoiceInfo = await ensureOrderInvoice(order, user);
+  if (invoiceInfo) {
+    order.invoiceNumber = invoiceInfo.invoiceNumber;
+    order.invoiceUrl = invoiceInfo.invoiceUrl;
+    order.invoicePublicId = invoiceInfo.invoicePublicId;
+    order.invoiceGeneratedAt = invoiceInfo.invoiceGeneratedAt;
+    await order.save();
+  }
+
+  if (!order.invoiceUrl) {
+    return res.status(404).json({ success: false, message: 'Invoice URL not found' });
+  }
+
+  return res.json({
+    success: true,
+    invoiceUrl: order.invoiceUrl,
+    invoiceNumber: order.invoiceNumber || `invoice-${order._id}`,
+  });
 };
 
 exports.cancelOrder = async (req, res) => {

@@ -2,6 +2,8 @@ const crypto = require('crypto');
 const razorpay = require('../config/razorpay');
 const Order = require('../models/Order');
 const Payment = require('../models/Payment');
+const User = require('../models/User');
+const { ensureOrderInvoice } = require('../services/invoiceService');
 
 exports.createRazorpayOrder = async (req, res) => {
   const { orderId } = req.body;
@@ -83,6 +85,16 @@ exports.verifyPayment = async (req, res) => {
   );
 
   if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+
+  const user = await User.findById(req.user._id).select('name email');
+  const invoiceInfo = await ensureOrderInvoice(order, user);
+  if (invoiceInfo) {
+    order.invoiceNumber = invoiceInfo.invoiceNumber;
+    order.invoiceUrl = invoiceInfo.invoiceUrl;
+    order.invoicePublicId = invoiceInfo.invoicePublicId;
+    order.invoiceGeneratedAt = invoiceInfo.invoiceGeneratedAt;
+    await order.save();
+  }
 
   for (const item of order.orderItems) {
     if (item.product && !item.isMysteryBox) {

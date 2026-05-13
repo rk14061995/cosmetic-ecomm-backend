@@ -51,6 +51,10 @@ const orderSchema = new mongoose.Schema(
     isDelivered: { type: Boolean, default: false },
     deliveredAt: Date,
     trackingNumber: String,
+    invoiceNumber: String,
+    invoiceUrl: String,
+    invoicePublicId: String,
+    invoiceGeneratedAt: Date,
     statusHistory: [
       {
         status: String,
