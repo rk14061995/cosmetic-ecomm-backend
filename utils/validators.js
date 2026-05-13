@@ -6,6 +6,13 @@ exports.registerSchema = Joi.object({
   password: Joi.string().min(6).required(),
   phone: Joi.string().pattern(/^[6-9]\d{9}$/).optional(),
   referralCode: Joi.string().optional(),
+  attribution: Joi.object({
+    source: Joi.string().max(80).required(),
+    medium: Joi.string().max(120).allow('').optional(),
+    campaign: Joi.string().max(160).allow('').optional(),
+    landingPath: Joi.string().max(500).allow('').optional(),
+    capturedAt: Joi.string().max(40).allow('').optional(),
+  }).optional(),
 });
 
 exports.loginSchema = Joi.object({
@@ -64,6 +71,34 @@ exports.couponSchema = Joi.object({
   isActive: Joi.boolean().optional(),
   applicableCategories: Joi.array().items(Joi.string()).optional(),
 });
+
+const marketingChannel = Joi.string().valid('instagram', 'whatsapp', 'google_ads', 'web', 'other');
+
+exports.marketingLinkSchema = Joi.object({
+  channel: marketingChannel.required(),
+  label: Joi.string().min(1).max(120).required(),
+  url: Joi.string()
+    .trim()
+    .max(2048)
+    .pattern(/^https?:\/\/.+/i)
+    .required(),
+  notes: Joi.string().max(500).allow('').optional(),
+  isActive: Joi.boolean().optional(),
+  sortOrder: Joi.number().integer().min(0).max(9999).optional(),
+});
+
+exports.marketingLinkUpdateSchema = Joi.object({
+  channel: marketingChannel.optional(),
+  label: Joi.string().min(1).max(120).optional(),
+  url: Joi.string()
+    .trim()
+    .max(2048)
+    .pattern(/^https?:\/\/.+/i)
+    .optional(),
+  notes: Joi.string().max(500).allow('').optional(),
+  isActive: Joi.boolean().optional(),
+  sortOrder: Joi.number().integer().min(0).max(9999).optional(),
+}).min(1);
 
 exports.orderSchema = Joi.object({
   orderItems: Joi.array()

@@ -16,8 +16,13 @@ function getTransporter() {
   return transporter;
 }
 
+function publicOrderLabel(order) {
+  if (order.orderNumber) return order.orderNumber;
+  return `#${order._id.toString().slice(-8).toUpperCase()}`;
+}
+
 function buildInvoiceHtml(order) {
-  const orderId = `#${order._id.toString().slice(-8).toUpperCase()}`;
+  const orderId = publicOrderLabel(order);
   const rows = (order.orderItems || [])
     .map(
       (item) =>
@@ -130,17 +135,18 @@ exports.sendPasswordResetEmail = async (email, resetUrl) => {
 };
 
 exports.sendOrderConfirmationEmail = async (email, order) => {
+  const label = publicOrderLabel(order);
   const itemsList = order.orderItems
     .map((item) => `<li>${item.name} x${item.quantity} - ₹${item.price * item.quantity}</li>`)
     .join('');
 
   await sendEmail({
     to: email,
-    subject: `Order Confirmed - #${order._id.toString().slice(-8).toUpperCase()}`,
+    subject: `Order Confirmed - ${label}`,
     template: 'order-confirmation',
     data: {
       orderId: order._id.toString(),
-      shortOrderId: order._id.toString().slice(-8).toUpperCase(),
+      shortOrderId: label,
       totalPrice: order.totalPrice,
       paymentMethod: order.paymentMethod,
       orderItems: order.orderItems,
@@ -151,7 +157,7 @@ exports.sendOrderConfirmationEmail = async (email, order) => {
       <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
         <h2 style="color:#e91e8c">Order Confirmed!</h2>
         <p>Thank you for your order. Here's a summary:</p>
-        <p><strong>Order ID:</strong> #${order._id.toString().slice(-8).toUpperCase()}</p>
+        <p><strong>Order ID:</strong> ${label}</p>
         <ul>${itemsList}</ul>
         <p><strong>Total: ₹${order.totalPrice}</strong></p>
         <p><strong>Payment Method:</strong> ${order.paymentMethod.toUpperCase()}</p>
@@ -183,20 +189,21 @@ exports.sendAbandonedCartEmail = async (email, userName, cartItems) => {
 };
 
 exports.sendOrderStatusEmail = async (email, order, status) => {
+  const label = publicOrderLabel(order);
   await sendEmail({
     to: email,
-    subject: `Order Update - #${order._id.toString().slice(-8).toUpperCase()}`,
+    subject: `Order Update - ${label}`,
     template: 'order-status',
     data: {
       orderId: order._id.toString(),
-      shortOrderId: order._id.toString().slice(-8).toUpperCase(),
+      shortOrderId: label,
       status,
       trackingNumber: order.trackingNumber || '',
     },
     html: `
       <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
         <h2 style="color:#e91e8c">Order Status Update</h2>
-        <p>Your order <strong>#${order._id.toString().slice(-8).toUpperCase()}</strong> status has been updated to:</p>
+        <p>Your order <strong>${label}</strong> status has been updated to:</p>
         <h3 style="color:#333">${status}</h3>
         ${order.trackingNumber ? `<p><strong>Tracking Number:</strong> ${order.trackingNumber}</p>` : ''}
       </div>

@@ -4,6 +4,7 @@ const User = require('../models/User');
 const Referral = require('../models/Referral');
 // const OtpVerification = require('../models/OtpVerification');
 const { generateTokens, generateResetToken } = require('../utils/helpers');
+const { pickAttributionFields } = require('../utils/attribution');
 const { sendPasswordResetEmail } = require('../services/emailService');
 // const { sendOtpSms, normalizeIndianMobile, OTP_EXPIRY_MINUTES } = require('../services/smsService');
 
@@ -29,12 +30,19 @@ const sendTokenResponse = (user, statusCode, res) => {
 };
 
 exports.register = async (req, res) => {
-  const { name, email, password, phone, referralCode } = req.body;
+  const { name, email, password, phone, referralCode, attribution } = req.body;
 
   const existingUser = await User.findOne({ email });
   if (existingUser) return res.status(400).json({ success: false, message: 'Email already registered' });
 
-  const user = await User.create({ name, email, password, phone });
+  const acquisition = pickAttributionFields(attribution);
+  const user = await User.create({
+    name,
+    email,
+    password,
+    phone,
+    ...(acquisition || {}),
+  });
 
   if (referralCode) {
     const referrer = await User.findOne({ referralCode });

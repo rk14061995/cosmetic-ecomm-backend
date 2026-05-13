@@ -120,6 +120,8 @@ app.use('/api/reels', require('./routes/reels'));
 app.use('/api/categories', require('./routes/categories'));
 app.use('/api/cart', require('./routes/cart'));
 app.use('/api/orders', require('./routes/orders'));
+/** Same router without `/api` prefix — avoids 404 when clients use base URL `http://host:5000` + `/orders/...`. */
+app.use('/orders', require('./routes/orders'));
 app.use('/api/payments', require('./routes/payments'));
 app.use('/api/coupons', require('./routes/coupons'));
 app.use('/api/mystery-boxes', require('./routes/mysteryBoxes'));
@@ -130,6 +132,9 @@ app.use('/api/back-in-stock', require('./routes/backInStock'));
 app.use('/api/subscriptions', require('./routes/subscriptions'));
 app.use('/api/affiliates', require('./routes/affiliates'));
 app.use('/api/bundles', require('./routes/bundles'));
+app.use('/api/marketing-links', require('./routes/marketingLinks'));
+/** Same path without `/api` — matches nginx `proxy_pass .../` that strips the `/api` prefix (see `/orders` below). */
+app.use('/marketing-links', require('./routes/marketingLinks'));
 
 app.use((req, res) => res.status(404).json({ success: false, message: 'Route not found' }));
 app.use(errorHandler);

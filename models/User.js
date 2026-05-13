@@ -41,6 +41,11 @@ const userSchema = new mongoose.Schema(
     resetPasswordToken: String,
     resetPasswordExpire: Date,
     refreshToken: String,
+    acquisitionSource: { type: String, default: '', trim: true, maxlength: 40 },
+    acquisitionMedium: { type: String, default: '', trim: true, maxlength: 80 },
+    acquisitionCampaign: { type: String, default: '', trim: true, maxlength: 120 },
+    acquisitionLandingPath: { type: String, default: '', maxlength: 500 },
+    acquisitionCapturedAt: { type: Date },
   },
   { timestamps: true }
 );
@@ -65,5 +70,6 @@ userSchema.methods.matchPassword = async function (enteredPassword) {
 
 userSchema.index({ email: 1 });
 userSchema.index({ referralCode: 1 });
+userSchema.index({ acquisitionSource: 1 });
 
 module.exports = mongoose.model('User', userSchema);

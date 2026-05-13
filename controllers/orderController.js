@@ -6,9 +6,10 @@ const Referral = require('../models/Referral');
 const User = require('../models/User');
 const Cart = require('../models/Cart');
 const { calculateShipping, getPaginationData } = require('../utils/helpers');
+const { buildOrderIdFilter } = require('../utils/orderLookup');
 const { sendOrderConfirmationEmail, sendOrderStatusEmail } = require('../services/emailService');
 const { allocateProducts, deductInventory } = require('../services/mysteryBoxService');
-const { ensureOrderInvoice } = require('../services/invoiceService');
+const { buildInvoiceNumber } = require('../services/invoiceService');
 
 const CANCEL_WINDOW_MS = 24 * 60 * 60 * 1000;
 
@@ -166,39 +167,75 @@ exports.getMyOrders = async (req, res) => {
 };
 
 exports.getOrder = async (req, res) => {
-  const order = await Order.findOne({ _id: req.params.id, user: req.user._id });
+  const filter = buildOrderIdFilter(req.params.id);
+  if (!filter) return res.status(400).json({ success: false, message: 'Invalid order reference' });
+  const order = await Order.findOne({ ...filter, user: req.user._id });
   if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
   res.json({ success: true, order });
 };
 
-exports.getOrderInvoice = async (req, res) => {
-  const order = await Order.findOne({ _id: req.params.id, user: req.user._id });
-  if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
-  if (!order.isPaid) return res.status(400).json({ success: false, message: 'Invoice is available only for paid orders' });
+/** Paid order owned by user — for HTML/JSON invoice (no PDF). */
+async function loadPaidOrderForInvoice(orderId, userId) {
+  const filter = buildOrderIdFilter(orderId);
+  if (!filter) {
+    return { err: { status: 400, json: { success: false, message: 'Invalid order reference' } } };
+  }
 
-  const user = await User.findById(req.user._id).select('name email');
-  const invoiceInfo = await ensureOrderInvoice(order, user);
-  if (invoiceInfo) {
-    order.invoiceNumber = invoiceInfo.invoiceNumber;
-    order.invoiceUrl = invoiceInfo.invoiceUrl;
-    order.invoicePublicId = invoiceInfo.invoicePublicId;
-    order.invoiceGeneratedAt = invoiceInfo.invoiceGeneratedAt;
+  const order = await Order.findOne({ ...filter, user: userId });
+  if (!order) return { err: { status: 404, json: { success: false, message: 'Order not found' } } };
+  if (!order.isPaid) {
+    return { err: { status: 400, json: { success: false, message: 'Invoice is available only for paid orders' } } };
+  }
+
+  return { order };
+}
+
+exports.getOrderInvoice = async (req, res) => {
+  const out = await loadPaidOrderForInvoice(req.params.id, req.user._id);
+  if (out.err) return res.status(out.err.status).json(out.err.json);
+  const { order } = out;
+
+  const user = await User.findById(req.user._id).select('name email phone');
+  const invoiceNumber = buildInvoiceNumber(order);
+  if (!order.invoiceNumber) {
+    order.invoiceNumber = invoiceNumber;
     await order.save();
   }
 
-  if (!order.invoiceUrl) {
-    return res.status(404).json({ success: false, message: 'Invoice URL not found' });
-  }
+  const siteName = process.env.NEXT_PUBLIC_SITE_NAME || 'KosmeticX';
 
   return res.json({
     success: true,
-    invoiceUrl: order.invoiceUrl,
-    invoiceNumber: order.invoiceNumber || `invoice-${order._id}`,
+    invoiceNumber: order.invoiceNumber || invoiceNumber,
+    siteName,
+    customer: {
+      name: user?.name || order.shippingAddress?.fullName,
+      email: user?.email,
+      phone: user?.phone || order.shippingAddress?.phone,
+    },
+    order: {
+      _id: order._id,
+      orderNumber: order.orderNumber,
+      createdAt: order.createdAt,
+      paidAt: order.paidAt,
+      orderStatus: order.orderStatus,
+      paymentMethod: order.paymentMethod,
+      orderItems: order.orderItems,
+      shippingAddress: order.shippingAddress,
+      itemsPrice: order.itemsPrice,
+      shippingPrice: order.shippingPrice,
+      discountAmount: order.discountAmount,
+      walletAmountUsed: order.walletAmountUsed,
+      totalPrice: order.totalPrice,
+      couponCode: order.couponCode,
+    },
   });
 };
 
 exports.cancelOrder = async (req, res) => {
-  const order = await Order.findOne({ _id: req.params.id, user: req.user._id });
+  const filter = buildOrderIdFilter(req.params.id);
+  if (!filter) return res.status(400).json({ success: false, message: 'Invalid order reference' });
+  const order = await Order.findOne({ ...filter, user: req.user._id });
   if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
   if (!['Pending', 'Paid'].includes(order.orderStatus)) {
     return res.status(400).json({ success: false, message: 'Order cannot be cancelled at this stage' });
@@ -240,6 +277,7 @@ exports.getAllOrders = async (req, res) => {
     const orClauses = [
       { couponCode: regex },
       { trackingNumber: regex },
+      { orderNumber: regex },
       { 'shippingAddress.fullName': regex },
       { 'shippingAddress.phone': regex },
     ];
@@ -289,8 +327,9 @@ exports.exportOrdersCsv = async (req, res) => {
 
   const orders = await Order.find(query).populate('user', 'name email phone').sort({ createdAt: -1 });
   const rows = [
-    ['orderId', 'date', 'customerName', 'customerEmail', 'phone', 'items', 'totalPrice', 'paymentMethod', 'status', 'trackingNumber'],
+    ['orderNumber', 'mongoId', 'date', 'customerName', 'customerEmail', 'phone', 'items', 'totalPrice', 'paymentMethod', 'status', 'trackingNumber'],
     ...orders.map((o) => [
+      o.orderNumber || '',
       String(o._id),
       new Date(o.createdAt).toISOString(),
       o.user?.name || '',
@@ -315,7 +354,9 @@ exports.exportOrdersCsv = async (req, res) => {
 
 exports.updateOrderStatus = async (req, res) => {
   const { status, trackingNumber, note } = req.body;
-  const order = await Order.findById(req.params.id).populate('user', 'email name');
+  const filter = buildOrderIdFilter(req.params.id);
+  if (!filter) return res.status(400).json({ success: false, message: 'Invalid order reference' });
+  const order = await Order.findOne(filter).populate('user', 'email name');
   if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
 
   const allowedTransitions = {

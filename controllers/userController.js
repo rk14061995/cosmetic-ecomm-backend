@@ -83,3 +83,33 @@ exports.getAllReferrals = async (req, res) => {
 
   res.json({ success: true, referrals });
 };
+
+/** Signups grouped by first-touch acquisition source (admin). */
+exports.getAcquisitionStats = async (req, res) => {
+  const rows = await User.aggregate([
+    { $match: { role: 'user' } },
+    {
+      $group: {
+        _id: {
+          $cond: [
+            {
+              $or: [
+                { $eq: ['$acquisitionSource', ''] },
+                { $eq: ['$acquisitionSource', null] },
+              ],
+            },
+            'direct',
+            '$acquisitionSource',
+          ],
+        },
+        count: { $sum: 1 },
+      },
+    },
+    { $sort: { count: -1 } },
+  ]);
+
+  res.json({
+    success: true,
+    stats: rows.map((r) => ({ source: r._id, count: r.count })),
+  });
+};

@@ -23,7 +23,10 @@ exports.apply = async (req, res) => {
 };
 
 exports.getMyAffiliate = async (req, res) => {
-  const affiliate = await Affiliate.findOne({ user: req.user._id });
+  const affiliate = await Affiliate.findOne({ user: req.user._id }).populate({
+    path: 'referrals.order',
+    select: 'orderNumber createdAt',
+  });
   if (!affiliate) return res.status(404).json({ success: false, message: 'Not an affiliate' });
   res.json({ success: true, affiliate });
 };

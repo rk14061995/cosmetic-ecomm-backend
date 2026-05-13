@@ -55,6 +55,8 @@ const orderSchema = new mongoose.Schema(
     invoiceUrl: String,
     invoicePublicId: String,
     invoiceGeneratedAt: Date,
+    /** Public order reference (e.g. KX-2026-A1B2C3D4). Shown to customers; _id remains the DB primary key. */
+    orderNumber: { type: String, trim: true, sparse: true, unique: true },
     statusHistory: [
       {
         status: String,
@@ -68,5 +70,16 @@ const orderSchema = new mongoose.Schema(
 
 orderSchema.index({ user: 1, createdAt: -1 });
 orderSchema.index({ orderStatus: 1 });
+
+orderSchema.pre('save', async function assignOrderNumber(next) {
+  if (this.orderNumber) return next();
+  try {
+    const { allocateUniqueOrderNumber } = require('../utils/orderNumber');
+    this.orderNumber = await allocateUniqueOrderNumber(this.constructor);
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
 
 module.exports = mongoose.model('Order', orderSchema);

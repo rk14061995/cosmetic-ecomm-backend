@@ -19,26 +19,6 @@ exports.uploadImage = async (fileBuffer, folder = 'cosmetic_web') => {
   });
 };
 
-exports.uploadRawFile = async (fileBuffer, options = {}) => {
-  const { folder = 'cosmetic_web/invoices', publicId, format = 'pdf' } = options;
-  return new Promise((resolve, reject) => {
-    const uploadStream = cloudinary.uploader.upload_stream(
-      {
-        folder,
-        resource_type: 'raw',
-        public_id: publicId,
-        format,
-        overwrite: true,
-      },
-      (error, result) => {
-        if (error) reject(error);
-        else resolve({ url: result.secure_url, publicId: result.public_id });
-      }
-    );
-    uploadStream.end(fileBuffer);
-  });
-};
-
 exports.deleteImage = async (publicId) => {
   return cloudinary.uploader.destroy(publicId);
 };

@@ -3,6 +3,7 @@ const router = express.Router();
 const {
   getAllUsers, getUserById, blockUser,
   getUserStats, getReferrals, getAllReferrals,
+  getAcquisitionStats,
 } = require('../controllers/userController');
 const { protect, adminOnly } = require('../middleware/auth');
 
@@ -13,6 +14,7 @@ router.get('/referrals/mine', getReferrals);
 router.use(adminOnly);
 router.get('/', getAllUsers);
 router.get('/referrals', getAllReferrals);
+router.get('/acquisition-stats', getAcquisitionStats);
 router.get('/:id', getUserById);
 router.get('/:id/stats', getUserStats);
 router.put('/:id/block', blockUser);
