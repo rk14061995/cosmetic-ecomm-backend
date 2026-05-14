@@ -5,7 +5,7 @@ exports.registerSchema = Joi.object({
   email: Joi.string().email().required(),
   password: Joi.string().min(6).required(),
   phone: Joi.string().pattern(/^[6-9]\d{9}$/).optional(),
-  referralCode: Joi.string().optional(),
+  referralCode: Joi.string().allow('').optional(),
   attribution: Joi.object({
     source: Joi.string().max(80).required(),
     medium: Joi.string().max(120).allow('').optional(),

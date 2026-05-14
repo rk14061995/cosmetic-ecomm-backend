@@ -7,7 +7,7 @@ function renderTemplate(template, data = {}) {
     return `
       <div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;padding:20px">
         <h2 style="color:#4f46e5">Order Confirmed 🎉</h2>
-        <p>Thanks for shopping with Glowzy.</p>
+        <p>Thanks for shopping with kosmeticX.</p>
         <p><strong>Order ID:</strong> #${data.shortOrderId || ""}</p>
         <p><strong>Total:</strong> ₹${data.totalPrice || 0}</p>
         <p><strong>Payment Method:</strong> ${(data.paymentMethod || "").toUpperCase()}</p>

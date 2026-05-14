@@ -37,7 +37,7 @@ function buildInvoiceHtml(order) {
 
   return `
     <div style="font-family:Arial,sans-serif;max-width:720px;margin:0 auto;padding:20px;color:#111827">
-      <h2 style="margin:0 0 8px">Glowzy Invoice</h2>
+      <h2 style="margin:0 0 8px">kosmeticX Invoice</h2>
       <p style="margin:0 0 16px;color:#6b7280">Order ${orderId}</p>
       <table style="width:100%;border-collapse:collapse;font-size:14px">
         <thead>
@@ -85,7 +85,7 @@ async function sendViaLambda(payload) {
 
 async function sendViaNodemailer({ to, subject, html }) {
   const mailOptions = {
-    from: `"Glowzy" <${process.env.EMAIL_FROM}>`,
+    from: `"kosmeticX" <${process.env.EMAIL_FROM}>`,
     to,
     subject,
     html,
