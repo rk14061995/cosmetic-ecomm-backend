@@ -77,7 +77,7 @@ exports.createOrder = async (req, res) => {
 
   const userWalletBalance = req.user.wallet;
   const actualWalletUsed = Math.min(walletAmountUsed, userWalletBalance, itemsPrice + shippingPrice - discountAmount);
-  const totalPrice = Math.max(0, itemsPrice + shippingPrice - discountAmount - actualWalletUsed);
+  const totalPrice = Math.round(Math.max(0, itemsPrice + shippingPrice - discountAmount - actualWalletUsed));
 
   const order = await Order.create({
     user: req.user._id,
