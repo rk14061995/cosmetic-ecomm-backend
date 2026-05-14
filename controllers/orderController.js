@@ -418,19 +418,48 @@ const handleReferralReward = async (order) => {
   }
 };
 
+// Statuses that represent confirmed/active revenue (excludes Pending, Cancelled, Refunded)
+const REVENUE_STATUSES = ['Paid', 'Processing', 'Shipped', 'Delivered'];
+
 exports.getAdminStats = async (req, res) => {
-  const [totalOrders, totalRevenue, totalUsers, recentOrders] = await Promise.all([
+  const [totalOrders, totalRevenue, totalUsers, recentOrders, investmentData, cogsData] = await Promise.all([
     Order.countDocuments(),
     Order.aggregate([
-      { $match: { orderStatus: { $in: ['Paid', 'Delivered', 'Shipped'] } } },
+      { $match: { orderStatus: { $in: REVENUE_STATUSES } } },
       { $group: { _id: null, total: { $sum: '$totalPrice' } } },
     ]),
     require('../models/User').countDocuments({ role: 'user' }),
     Order.find().sort({ createdAt: -1 }).limit(5).populate('user', 'name email'),
+    // Total investment = costPrice × current stock for every active product
+    Product.aggregate([
+      { $match: { isActive: true, costPrice: { $gt: 0 } } },
+      { $group: { _id: null, total: { $sum: { $multiply: ['$costPrice', '$stock'] } } } },
+    ]),
+    // COGS = costPrice × qty sold across confirmed orders
+    Order.aggregate([
+      { $match: { orderStatus: { $in: REVENUE_STATUSES } } },
+      { $unwind: '$orderItems' },
+      { $match: { 'orderItems.isMysteryBox': { $ne: true }, 'orderItems.product': { $exists: true, $ne: null } } },
+      {
+        $lookup: {
+          from: 'products',
+          let: { pid: '$orderItems.product' },
+          pipeline: [{ $match: { $expr: { $eq: ['$_id', '$$pid'] } } }, { $project: { costPrice: 1 } }],
+          as: 'productDoc',
+        },
+      },
+      { $unwind: { path: '$productDoc', preserveNullAndEmptyArrays: true } },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: { $multiply: [{ $ifNull: ['$productDoc.costPrice', 0] }, '$orderItems.quantity'] } },
+        },
+      },
+    ]),
   ]);
 
   const monthlyRevenue = await Order.aggregate([
-    { $match: { orderStatus: { $in: ['Paid', 'Delivered', 'Shipped'] } } },
+    { $match: { orderStatus: { $in: REVENUE_STATUSES } } },
     {
       $group: {
         _id: { month: { $month: '$createdAt' }, year: { $year: '$createdAt' } },
@@ -442,14 +471,24 @@ exports.getAdminStats = async (req, res) => {
     { $limit: 12 },
   ]);
 
+  const totalRevenueVal = totalRevenue[0]?.total || 0;
+  const totalInvestment = investmentData[0]?.total || 0;  // costPrice × stock (total inventory value)
+  const totalCogs = cogsData[0]?.total || 0;              // costPrice × qty sold (kept for future use)
+  const totalProfit = totalRevenueVal - totalInvestment;
+  const profitMargin = totalRevenueVal > 0 ? (totalProfit / totalRevenueVal) * 100 : 0;
+
   res.json({
     success: true,
     stats: {
       totalOrders,
-      totalRevenue: totalRevenue[0]?.total || 0,
+      totalRevenue: totalRevenueVal,
       totalUsers,
       recentOrders,
       monthlyRevenue,
+      totalInvestment,
+      totalCogs,
+      totalProfit,
+      profitMargin,
     },
   });
 };

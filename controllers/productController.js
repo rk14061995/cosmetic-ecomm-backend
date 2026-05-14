@@ -4,18 +4,20 @@ const { slugify, getPaginationData } = require('../utils/helpers');
 const { uploadMultipleImages, deleteImage } = require('../services/cloudinaryService');
 
 const BOOLEAN_FORM_FIELDS = [
-  'isFeatured',
-  'isNewArrival',
-  'isBestSeller',
-  'isActive',
-  'eligibleForMysteryBox',
-  'virtualTryOn',
+  'isFeatured', 'isNewArrival', 'isBestSeller', 'isActive', 'eligibleForMysteryBox', 'virtualTryOn',
 ];
+const NUMBER_FORM_FIELDS = ['price', 'discountPrice', 'costPrice', 'stock'];
 
 function coerceBooleanFormFields(obj) {
   for (const k of BOOLEAN_FORM_FIELDS) {
     if (obj[k] === 'true' || obj[k] === true) obj[k] = true;
     else if (obj[k] === 'false' || obj[k] === false) obj[k] = false;
+  }
+  for (const k of NUMBER_FORM_FIELDS) {
+    if (obj[k] !== undefined && obj[k] !== '' && obj[k] !== null) {
+      const n = Number(obj[k]);
+      if (!isNaN(n)) obj[k] = n;
+    }
   }
 }
 
@@ -131,6 +133,19 @@ exports.getProduct = async (req, res) => {
     }
     return res.status(500).json({ success: false, message: 'Failed to load product' });
   }
+};
+
+exports.getProductStats = async (req, res) => {
+  const [countResult, ratingResult] = await Promise.all([
+    Product.countDocuments({ isActive: true }),
+    Product.aggregate([
+      { $match: { isActive: true, numReviews: { $gt: 0 } } },
+      { $group: { _id: null, avg: { $avg: '$ratings' } } },
+    ]),
+  ]);
+  const totalProducts = countResult;
+  const averageRating = ratingResult[0]?.avg ?? 0;
+  res.json({ success: true, totalProducts, averageRating });
 };
 
 exports.getFeaturedProducts = async (req, res) => {

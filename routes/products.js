@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const {
-  getProducts, getProduct, getFeaturedProducts,
+  getProducts, getProduct, getFeaturedProducts, getProductStats,
   createProduct, updateProduct, deleteProduct,
   deleteProductImage, addReview, toggleWishlist,
 } = require('../controllers/productController');
@@ -9,6 +9,7 @@ const { protect, adminOnly } = require('../middleware/auth');
 const upload = require('../middleware/upload');
 
 router.get('/', getProducts);
+router.get('/stats', getProductStats);
 router.get('/featured', getFeaturedProducts);
 router.get('/:id', getProduct);
 
