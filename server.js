@@ -135,6 +135,9 @@ app.use('/api/bundles', require('./routes/bundles'));
 app.use('/api/marketing-links', require('./routes/marketingLinks'));
 /** Same path without `/api` — matches nginx `proxy_pass .../` that strips the `/api` prefix (see `/orders` below). */
 app.use('/marketing-links', require('./routes/marketingLinks'));
+app.use('/api/expenses', require('./routes/expenses'));
+app.use('/api/employees', require('./routes/employees'));
+app.use('/api/refunds', require('./routes/refunds'));
 
 app.use((req, res) => res.status(404).json({ success: false, message: 'Route not found' }));
 app.use(errorHandler);

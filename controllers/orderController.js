@@ -11,6 +11,8 @@ const { sendOrderConfirmationEmail, sendOrderStatusEmail } = require('../service
 const { allocateProducts, deductInventory } = require('../services/mysteryBoxService');
 const { buildInvoiceNumber } = require('../services/invoiceService');
 
+const Expense = require('../models/Expense');
+
 const CANCEL_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 exports.createOrder = async (req, res) => {
@@ -422,22 +424,37 @@ const handleReferralReward = async (order) => {
 const REVENUE_STATUSES = ['Paid', 'Processing', 'Shipped', 'Delivered'];
 
 exports.getAdminStats = async (req, res) => {
-  const [totalOrders, totalRevenue, totalUsers, recentOrders, investmentData, cogsData] = await Promise.all([
-    Order.countDocuments(),
+  const { from, to } = req.query;
+  const dateFilter = {};
+  if (from || to) {
+    dateFilter.createdAt = {};
+    if (from) dateFilter.createdAt.$gte = new Date(from);
+    if (to) {
+      const toDate = new Date(to);
+      toDate.setHours(23, 59, 59, 999);
+      dateFilter.createdAt.$lte = toDate;
+    }
+  }
+
+  const revenueMatch = { orderStatus: { $in: REVENUE_STATUSES }, ...dateFilter };
+
+  const [totalOrders, totalRevenue, totalUsers, recentOrders, investmentData, cogsData, expensesData] = await Promise.all([
+    Order.countDocuments(dateFilter),
     Order.aggregate([
-      { $match: { orderStatus: { $in: REVENUE_STATUSES } } },
+      { $match: revenueMatch },
       { $group: { _id: null, total: { $sum: '$totalPrice' } } },
     ]),
-    require('../models/User').countDocuments({ role: 'user' }),
-    Order.find().sort({ createdAt: -1 }).limit(5).populate('user', 'name email'),
-    // Total investment = costPrice × current stock for every active product
+    // New customers in the period (or total if no filter)
+    require('../models/User').countDocuments({ role: 'user', ...dateFilter }),
+    Order.find(dateFilter).sort({ createdAt: -1 }).limit(5).populate('user', 'name email'),
+    // Stock investment = costPrice × current stock (always current snapshot, no date filter)
     Product.aggregate([
       { $match: { isActive: true, costPrice: { $gt: 0 } } },
       { $group: { _id: null, total: { $sum: { $multiply: ['$costPrice', '$stock'] } } } },
     ]),
-    // COGS = costPrice × qty sold across confirmed orders
+    // COGS = costPrice × qty sold in the period
     Order.aggregate([
-      { $match: { orderStatus: { $in: REVENUE_STATUSES } } },
+      { $match: revenueMatch },
       { $unwind: '$orderItems' },
       { $match: { 'orderItems.isMysteryBox': { $ne: true }, 'orderItems.product': { $exists: true, $ne: null } } },
       {
@@ -449,31 +466,27 @@ exports.getAdminStats = async (req, res) => {
         },
       },
       { $unwind: { path: '$productDoc', preserveNullAndEmptyArrays: true } },
-      {
-        $group: {
-          _id: null,
-          total: { $sum: { $multiply: [{ $ifNull: ['$productDoc.costPrice', 0] }, '$orderItems.quantity'] } },
-        },
-      },
+      { $group: { _id: null, total: { $sum: { $multiply: [{ $ifNull: ['$productDoc.costPrice', 0] }, '$orderItems.quantity'] } } } },
+    ]),
+    // Overhead expenses in the period
+    Expense.aggregate([
+      ...(Object.keys(dateFilter).length ? [{ $match: dateFilter }] : []),
+      { $group: { _id: null, total: { $sum: '$amount' } } },
     ]),
   ]);
 
   const monthlyRevenue = await Order.aggregate([
-    { $match: { orderStatus: { $in: REVENUE_STATUSES } } },
-    {
-      $group: {
-        _id: { month: { $month: '$createdAt' }, year: { $year: '$createdAt' } },
-        revenue: { $sum: '$totalPrice' },
-        orders: { $sum: 1 },
-      },
-    },
+    { $match: revenueMatch },
+    { $group: { _id: { month: { $month: '$createdAt' }, year: { $year: '$createdAt' } }, revenue: { $sum: '$totalPrice' }, orders: { $sum: 1 } } },
     { $sort: { '_id.year': -1, '_id.month': -1 } },
     { $limit: 12 },
   ]);
 
   const totalRevenueVal = totalRevenue[0]?.total || 0;
-  const totalInvestment = investmentData[0]?.total || 0;  // costPrice × stock (total inventory value)
-  const totalCogs = cogsData[0]?.total || 0;              // costPrice × qty sold (kept for future use)
+  const stockInvestment = investmentData[0]?.total || 0;
+  const totalCogs = cogsData[0]?.total || 0;
+  const totalExpenses = expensesData[0]?.total || 0;
+  const totalInvestment = stockInvestment + totalExpenses;
   const totalProfit = totalRevenueVal - totalInvestment;
   const profitMargin = totalRevenueVal > 0 ? (totalProfit / totalRevenueVal) * 100 : 0;
 
@@ -485,6 +498,8 @@ exports.getAdminStats = async (req, res) => {
       totalUsers,
       recentOrders,
       monthlyRevenue,
+      stockInvestment,
+      totalExpenses,
       totalInvestment,
       totalCogs,
       totalProfit,
