@@ -57,6 +57,7 @@ const orderSchema = new mongoose.Schema(
     invoiceGeneratedAt: Date,
     /** Public order reference (e.g. KX-2026-A1B2C3D4). Shown to customers; _id remains the DB primary key. */
     orderNumber: { type: String, trim: true, sparse: true, unique: true },
+    assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee', default: null },
     statusHistory: [
       {
         status: String,

@@ -258,10 +258,12 @@ exports.cancelOrder = async (req, res) => {
 };
 
 exports.getAllOrders = async (req, res) => {
-  const { page = 1, limit = 20, status, search, paymentMethod, from, to } = req.query;
+  const { page = 1, limit = 20, status, search, paymentMethod, from, to, assignedTo, unassigned } = req.query;
   const query = {};
   if (status) query.orderStatus = status;
   if (paymentMethod) query.paymentMethod = paymentMethod;
+  if (assignedTo) query.assignedTo = assignedTo;
+  if (unassigned === 'true') query.assignedTo = null;
 
   if (from || to) {
     query.createdAt = {};
@@ -305,6 +307,7 @@ exports.getAllOrders = async (req, res) => {
 
   const orders = await Order.find(query)
     .populate('user', 'name email phone')
+    .populate('assignedTo', 'name role')
     .sort({ createdAt: -1 })
     .skip((pagination.currentPage - 1) * pagination.pageSize)
     .limit(pagination.pageSize);
@@ -506,4 +509,27 @@ exports.getAdminStats = async (req, res) => {
       profitMargin,
     },
   });
+};
+
+exports.assignOrder = async (req, res) => {
+  const { employeeId } = req.body;
+  const filter = buildOrderIdFilter(req.params.id);
+  if (!filter) return res.status(400).json({ success: false, message: 'Invalid order reference' });
+
+  const order = await Order.findOne(filter);
+  if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+
+  if (employeeId) {
+    const Employee = require('../models/Employee');
+    const emp = await Employee.findById(employeeId).select('_id name status');
+    if (!emp) return res.status(404).json({ success: false, message: 'Employee not found' });
+    if (emp.status !== 'active') return res.status(400).json({ success: false, message: 'Employee is not active' });
+    order.assignedTo = emp._id;
+  } else {
+    order.assignedTo = null;
+  }
+
+  await order.save();
+  await order.populate('assignedTo', 'name role');
+  res.json({ success: true, order });
 };

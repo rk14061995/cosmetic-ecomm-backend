@@ -3,17 +3,32 @@ const Product = require('../models/Product');
 const MysteryBox = require('../models/MysteryBox');
 const Coupon = require('../models/Coupon');
 
-exports.getCart = async (req, res) => {
-  let cart = await Cart.findOne({ user: req.user._id })
+const FREE_SHIPPING_THRESHOLD = 500;
+const SHIPPING_FLAT = 50;
+
+/** Single populated read + summary (used by GET and all mutating handlers). */
+async function cartPayloadForUser(userId) {
+  let cart = await Cart.findOne({ user: userId })
     .populate('items.product', 'name images price stock slug isActive')
-    .populate('items.mysteryBox', 'name image price stock tier isActive');
+    .populate('items.mysteryBox', 'name image price stock tier isActive')
+    .lean();
 
   if (!cart) {
-    cart = await Cart.create({ user: req.user._id, items: [] });
+    await Cart.create({ user: userId, items: [] });
+    cart = await Cart.findOne({ user: userId })
+      .populate('items.product', 'name images price stock slug isActive')
+      .populate('items.mysteryBox', 'name image price stock tier isActive')
+      .lean();
+  }
+
+  for (const it of cart.items) {
+    if (it.product && Array.isArray(it.product.images) && it.product.images.length > 1) {
+      it.product = { ...it.product, images: [it.product.images[0]] };
+    }
   }
 
   const subtotal = cart.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const shipping = subtotal >= 500 ? 0 : 50;
+  const shipping = subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_FLAT;
   let discount = 0;
 
   if (cart.coupon) {
@@ -21,16 +36,24 @@ exports.getCart = async (req, res) => {
     if (coupon) discount = coupon.calculateDiscount(subtotal);
   }
 
-  res.json({
-    success: true,
-    cart,
-    summary: {
-      subtotal,
-      shipping,
-      discount,
-      total: subtotal + shipping - discount,
-    },
-  });
+  const summary = {
+    subtotal,
+    shipping,
+    discount,
+    total: subtotal + shipping - discount,
+  };
+
+  return { cart, summary };
+}
+
+function cartLineCount(cart) {
+  if (!cart?.items?.length) return 0;
+  return cart.items.reduce((sum, i) => sum + (i.quantity || 0), 0);
+}
+
+exports.getCart = async (req, res) => {
+  const { cart, summary } = await cartPayloadForUser(req.user._id);
+  res.json({ success: true, cart, summary });
 };
 
 exports.addToCart = async (req, res) => {
@@ -65,9 +88,7 @@ exports.addToCart = async (req, res) => {
   const existingIndex = cart.items.findIndex(
     (i) =>
       i.itemType === itemType &&
-      (itemType === 'product'
-        ? i.product?.toString() === itemId
-        : i.mysteryBox?.toString() === itemId)
+      (itemType === 'product' ? i.product?.toString() === itemId : i.mysteryBox?.toString() === itemId)
   );
 
   if (existingIndex > -1) {
@@ -80,7 +101,15 @@ exports.addToCart = async (req, res) => {
   }
 
   await cart.save();
-  res.json({ success: true, message: 'Added to cart', cartCount: cart.items.length });
+
+  const payload = await cartPayloadForUser(req.user._id);
+  res.json({
+    success: true,
+    message: 'Added to cart',
+    cart: payload.cart,
+    summary: payload.summary,
+    cartCount: cartLineCount(payload.cart),
+  });
 };
 
 exports.updateCartItem = async (req, res) => {
@@ -90,19 +119,27 @@ exports.updateCartItem = async (req, res) => {
   const cart = await Cart.findOne({ user: req.user._id });
   if (!cart) return res.status(404).json({ success: false, message: 'Cart not found' });
 
-  const item = cart.items.id(req.params.itemId);
-  if (!item) return res.status(404).json({ success: false, message: 'Item not found in cart' });
+  const line = cart.items.id(req.params.itemId);
+  if (!line) return res.status(404).json({ success: false, message: 'Item not found in cart' });
 
-  if (item.itemType === 'product') {
-    const product = await Product.findById(item.product);
+  if (line.itemType === 'product') {
+    const product = await Product.findById(line.product);
     if (product && product.stock < quantity) {
       return res.status(400).json({ success: false, message: 'Insufficient stock' });
     }
   }
 
-  item.quantity = quantity;
+  line.quantity = quantity;
   await cart.save();
-  res.json({ success: true, message: 'Cart updated' });
+
+  const payload = await cartPayloadForUser(req.user._id);
+  res.json({
+    success: true,
+    message: 'Cart updated',
+    cart: payload.cart,
+    summary: payload.summary,
+    cartCount: cartLineCount(payload.cart),
+  });
 };
 
 exports.removeCartItem = async (req, res) => {
@@ -110,12 +147,27 @@ exports.removeCartItem = async (req, res) => {
   if (!cart) return res.status(404).json({ success: false, message: 'Cart not found' });
   cart.items = cart.items.filter((item) => item._id.toString() !== req.params.itemId);
   await cart.save();
-  res.json({ success: true, message: 'Item removed from cart' });
+
+  const payload = await cartPayloadForUser(req.user._id);
+  res.json({
+    success: true,
+    message: 'Item removed from cart',
+    cart: payload.cart,
+    summary: payload.summary,
+    cartCount: cartLineCount(payload.cart),
+  });
 };
 
 exports.clearCart = async (req, res) => {
   await Cart.findOneAndUpdate({ user: req.user._id }, { items: [], coupon: null, couponCode: null });
-  res.json({ success: true, message: 'Cart cleared' });
+  const payload = await cartPayloadForUser(req.user._id);
+  res.json({
+    success: true,
+    message: 'Cart cleared',
+    cart: payload.cart,
+    summary: payload.summary,
+    cartCount: 0,
+  });
 };
 
 exports.applyCoupon = async (req, res) => {
@@ -146,10 +198,26 @@ exports.applyCoupon = async (req, res) => {
   cart.couponCode = code.toUpperCase();
   await cart.save();
 
-  res.json({ success: true, message: 'Coupon applied', discount, couponCode: cart.couponCode });
+  const payload = await cartPayloadForUser(req.user._id);
+  res.json({
+    success: true,
+    message: 'Coupon applied',
+    discount,
+    couponCode: payload.cart.couponCode,
+    cart: payload.cart,
+    summary: payload.summary,
+    cartCount: cartLineCount(payload.cart),
+  });
 };
 
 exports.removeCoupon = async (req, res) => {
   await Cart.findOneAndUpdate({ user: req.user._id }, { coupon: null, couponCode: null });
-  res.json({ success: true, message: 'Coupon removed' });
+  const payload = await cartPayloadForUser(req.user._id);
+  res.json({
+    success: true,
+    message: 'Coupon removed',
+    cart: payload.cart,
+    summary: payload.summary,
+    cartCount: cartLineCount(payload.cart),
+  });
 };
