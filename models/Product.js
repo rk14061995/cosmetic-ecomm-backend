@@ -61,7 +61,15 @@ const productSchema = new mongoose.Schema(
     virtualTryOn: { type: Boolean, default: false },
     /** Hex colour used for the soft tint overlay (e.g. lipstick / blush). */
     tryOnTintHex: { type: String, default: '#db2777', trim: true },
+    shades: [
+      {
+        name: { type: String, required: true, trim: true },
+        hexColor: { type: String, required: true, trim: true },
+      },
+    ],
     frequentlyBoughtWith: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Product' }],
+    isTestProduct: { type: Boolean, default: false },
+    shippingCharge: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true }
 );

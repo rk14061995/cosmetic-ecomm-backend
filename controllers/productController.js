@@ -4,9 +4,9 @@ const { slugify, getPaginationData } = require('../utils/helpers');
 const { uploadMultipleImages, deleteImage } = require('../services/cloudinaryService');
 
 const BOOLEAN_FORM_FIELDS = [
-  'isFeatured', 'isNewArrival', 'isBestSeller', 'isActive', 'eligibleForMysteryBox', 'virtualTryOn',
+  'isFeatured', 'isNewArrival', 'isBestSeller', 'isActive', 'eligibleForMysteryBox', 'virtualTryOn', 'isTestProduct',
 ];
-const NUMBER_FORM_FIELDS = ['price', 'discountPrice', 'costPrice', 'stock'];
+const NUMBER_FORM_FIELDS = ['price', 'discountPrice', 'costPrice', 'stock', 'shippingCharge'];
 
 function coerceBooleanFormFields(obj) {
   for (const k of BOOLEAN_FORM_FIELDS) {
@@ -37,7 +37,9 @@ exports.getProducts = async (req, res) => {
     bestSeller,
     includeInactive,
   } = req.query;
+  const isAdmin = Boolean(req.user);
   const query = includeInactive === 'true' ? {} : { isActive: true };
+  if (!isAdmin) query.isTestProduct = { $ne: true };
 
   if (category) query.category = category;
   if (brand) query.brand = new RegExp(`^${String(brand).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
@@ -119,6 +121,11 @@ exports.getProduct = async (req, res) => {
 
     if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
 
+    // Test products are only accessible to authenticated (admin) users
+    if (product.isTestProduct && !req.user) {
+      return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+
     // Bad review.user refs cause CastError on populate and bubble as "Resource not found" — skip populate for those.
     try {
       await product.populate('reviews.user', 'name avatar');
@@ -155,9 +162,23 @@ exports.getFeaturedProducts = async (req, res) => {
   res.json({ success: true, products });
 };
 
+function parseShadesJson(data) {
+  if (!data.shadesJson) { delete data.shadesJson; return; }
+  try {
+    const parsed = JSON.parse(data.shadesJson);
+    if (Array.isArray(parsed)) {
+      data.shades = parsed
+        .filter((s) => s && typeof s.name === 'string' && typeof s.hexColor === 'string')
+        .map((s) => ({ name: s.name.trim(), hexColor: s.hexColor.trim() }));
+    }
+  } catch (_) { /* ignore malformed JSON */ }
+  delete data.shadesJson;
+}
+
 exports.createProduct = async (req, res) => {
   const data = { ...req.body };
   coerceBooleanFormFields(data);
+  parseShadesJson(data);
   if (!data.slug) data.slug = slugify(data.name);
   if (data.category) {
     const category = await Category.findOne({ name: data.category, isActive: true });
@@ -177,6 +198,7 @@ exports.createProduct = async (req, res) => {
 exports.updateProduct = async (req, res) => {
   const data = { ...req.body };
   coerceBooleanFormFields(data);
+  parseShadesJson(data);
   delete data.existingImagesJson;
 
   const shouldReplaceImages =

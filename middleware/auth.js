@@ -31,6 +31,21 @@ exports.protect = async (req, res, next) => {
   }
 };
 
+exports.optionalProtect = async (req, res, next) => {
+  let token;
+  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+    token = req.headers.authorization.split(' ')[1];
+  }
+  if (!token) return next();
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = await User.findById(decoded.id).select('-password');
+  } catch (_) {
+    // Invalid/expired token — proceed without user
+  }
+  next();
+};
+
 exports.adminOnly = (req, res, next) => {
   // Mobile-first single-operator mode: any authenticated user can access admin APIs.
   // Keep this enabled only when you intentionally want app-only admin access.
