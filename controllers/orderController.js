@@ -16,7 +16,7 @@ const Expense = require('../models/Expense');
 const CANCEL_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 exports.createOrder = async (req, res) => {
-  const { shippingAddress, paymentMethod, couponCode, walletAmountUsed = 0 } = req.body;
+  const { shippingAddress, paymentMethod, couponCode, walletAmountUsed = 0, pointsToRedeem = 0 } = req.body;
 
   const cart = await Cart.findOne({ user: req.user._id }).populate('items.product').populate('items.mysteryBox');
   if (!cart || cart.items.length === 0) {
@@ -79,7 +79,18 @@ exports.createOrder = async (req, res) => {
 
   const userWalletBalance = req.user.wallet;
   const actualWalletUsed = Math.min(walletAmountUsed, userWalletBalance, itemsPrice + shippingPrice - discountAmount);
-  const totalPrice = Math.round(Math.max(0, itemsPrice + shippingPrice - discountAmount - actualWalletUsed));
+
+  // Points redemption: 5 points = ₹1
+  const POINTS_PER_RUPEE = 5;
+  const userLoyaltyPoints = req.user.loyaltyPoints || 0;
+  const sanitizedPointsToRedeem = Math.max(0, Math.floor(Number(pointsToRedeem) || 0));
+  const maxRedeemableByBalance = Math.floor(userLoyaltyPoints / POINTS_PER_RUPEE) * POINTS_PER_RUPEE;
+  const prePointsTotal = itemsPrice + shippingPrice - discountAmount - actualWalletUsed;
+  const maxRedeemableByOrder = Math.floor(prePointsTotal) * POINTS_PER_RUPEE;
+  const actualPointsRedeemed = Math.min(sanitizedPointsToRedeem, maxRedeemableByBalance, maxRedeemableByOrder);
+  const pointsRedeemedValue = Math.floor(actualPointsRedeemed / POINTS_PER_RUPEE);
+
+  const totalPrice = Math.round(Math.max(0, prePointsTotal - pointsRedeemedValue));
 
   const order = await Order.create({
     user: req.user._id,
@@ -90,6 +101,8 @@ exports.createOrder = async (req, res) => {
     shippingPrice,
     discountAmount,
     walletAmountUsed: actualWalletUsed,
+    pointsRedeemed: actualPointsRedeemed,
+    pointsRedeemedValue,
     totalPrice,
     coupon: appliedCoupon,
     couponCode: couponCode?.toUpperCase(),
@@ -98,6 +111,9 @@ exports.createOrder = async (req, res) => {
 
   if (actualWalletUsed > 0) {
     await User.findByIdAndUpdate(req.user._id, { $inc: { wallet: -actualWalletUsed } });
+  }
+  if (actualPointsRedeemed > 0) {
+    await User.findByIdAndUpdate(req.user._id, { $inc: { loyaltyPoints: -actualPointsRedeemed } });
   }
 
   // Award loyalty points: 1 point per ₹10 spent
@@ -252,6 +268,9 @@ exports.cancelOrder = async (req, res) => {
 
   if (order.walletAmountUsed > 0) {
     await User.findByIdAndUpdate(req.user._id, { $inc: { wallet: order.walletAmountUsed } });
+  }
+  if (order.pointsRedeemed > 0) {
+    await User.findByIdAndUpdate(req.user._id, { $inc: { loyaltyPoints: order.pointsRedeemed } });
   }
 
   res.json({ success: true, message: 'Order cancelled', order });

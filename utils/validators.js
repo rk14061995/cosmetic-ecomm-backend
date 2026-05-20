@@ -124,6 +124,7 @@ exports.orderSchema = Joi.object({
   paymentMethod: Joi.string().valid('razorpay', 'cod').required(),
   couponCode: Joi.string().optional(),
   walletAmountUsed: Joi.number().min(0).optional(),
+  pointsToRedeem: Joi.number().integer().min(0).optional(),
 });
 
 exports.createRazorpayOrderSchema = Joi.object({

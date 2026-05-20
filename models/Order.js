@@ -38,6 +38,8 @@ const orderSchema = new mongoose.Schema(
     shippingPrice: { type: Number, required: true, default: 0 },
     discountAmount: { type: Number, default: 0 },
     walletAmountUsed: { type: Number, default: 0 },
+    pointsRedeemed: { type: Number, default: 0 },
+    pointsRedeemedValue: { type: Number, default: 0 },
     totalPrice: { type: Number, required: true },
     coupon: { type: mongoose.Schema.Types.ObjectId, ref: 'Coupon' },
     couponCode: String,
