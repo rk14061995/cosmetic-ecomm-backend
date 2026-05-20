@@ -9,7 +9,7 @@ const SHIPPING_FLAT = 50;
 /** Single populated read + summary (used by GET and all mutating handlers). */
 async function cartPayloadForUser(userId) {
   let cart = await Cart.findOne({ user: userId })
-    .populate('items.product', 'name images price stock slug isActive')
+    .populate('items.product', 'name images price stock slug isActive isTestProduct')
     .populate('items.mysteryBox', 'name image price stock tier isActive')
     .lean();
 
@@ -28,7 +28,8 @@ async function cartPayloadForUser(userId) {
   }
 
   const subtotal = cart.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const shipping = subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_FLAT;
+  const hasOnlyTestProducts = cart.items.length > 0 && cart.items.every((it) => it.product?.isTestProduct);
+  const shipping = hasOnlyTestProducts || subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_FLAT;
   let discount = 0;
 
   if (cart.coupon) {
