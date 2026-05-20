@@ -62,7 +62,8 @@ exports.createOrder = async (req, res) => {
     }
   }
 
-  const shippingPrice = calculateShipping(itemsPrice);
+  const hasOnlyTestProducts = cart.items.length > 0 && cart.items.every((i) => i.product?.isTestProduct);
+  const shippingPrice = hasOnlyTestProducts ? 0 : calculateShipping(itemsPrice);
   let discountAmount = 0;
   let appliedCoupon = null;
 
