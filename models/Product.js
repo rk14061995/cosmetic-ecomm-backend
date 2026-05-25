@@ -70,6 +70,7 @@ const productSchema = new mongoose.Schema(
     frequentlyBoughtWith: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Product' }],
     isTestProduct: { type: Boolean, default: false },
     shippingCharge: { type: Number, default: 0, min: 0 },
+    buyFrom: { type: String, trim: true },
   },
   { timestamps: true }
 );
