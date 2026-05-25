@@ -1,6 +1,7 @@
 const Brand = require('../models/Brand');
 const { slugify } = require('../utils/helpers');
 const { uploadImage, deleteImage } = require('../services/cloudinaryService');
+const { logAudit } = require('../services/auditService');
 const toBoolean = (value, fallback = true) => {
   if (value === undefined || value === null) return fallback;
   if (typeof value === 'boolean') return value;
@@ -91,12 +92,17 @@ exports.createBrand = async (req, res) => {
     isActive: toBoolean(isActive, true),
   });
 
+  await logAudit({
+    entity: 'Brand', entityId: brand._id, entityName: brand.name,
+    action: 'create', performedBy: req.user,
+  });
   res.status(201).json({ success: true, brand });
 };
 
 exports.updateBrand = async (req, res) => {
   const brand = await Brand.findById(req.params.id);
   if (!brand) return res.status(404).json({ success: false, message: 'Brand not found' });
+  const oldSnapshot = brand.toObject();
 
   const nextName = req.body.name ? String(req.body.name).trim() : brand.name;
   if (!nextName) return res.status(400).json({ success: false, message: 'Brand name is required' });
@@ -135,6 +141,10 @@ exports.updateBrand = async (req, res) => {
   if (req.body.isActive !== undefined) brand.isActive = toBoolean(req.body.isActive, brand.isActive);
   await brand.save();
 
+  await logAudit({
+    entity: 'Brand', entityId: brand._id, entityName: brand.name,
+    action: 'update', oldDoc: oldSnapshot, newDoc: brand, performedBy: req.user,
+  });
   res.json({ success: true, brand });
 };
 
@@ -148,6 +158,11 @@ exports.deleteBrand = async (req, res) => {
       await deleteImage(publicId);
     } catch (_) {}
   }
+  const { _id: brandId, name: brandName } = brand;
   await brand.deleteOne();
+  await logAudit({
+    entity: 'Brand', entityId: brandId, entityName: brandName,
+    action: 'delete', performedBy: req.user,
+  });
   res.json({ success: true, message: 'Brand deleted' });
 };

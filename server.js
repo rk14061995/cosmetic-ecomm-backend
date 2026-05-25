@@ -138,6 +138,7 @@ app.use('/marketing-links', require('./routes/marketingLinks'));
 app.use('/api/expenses', require('./routes/expenses'));
 app.use('/api/employees', require('./routes/employees'));
 app.use('/api/refunds', require('./routes/refunds'));
+app.use('/api/audit', require('./routes/audit'));
 
 app.use((req, res) => res.status(404).json({ success: false, message: 'Route not found' }));
 app.use(errorHandler);

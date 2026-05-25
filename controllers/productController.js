@@ -2,6 +2,7 @@ const Product = require('../models/Product');
 const Category = require('../models/Category');
 const { slugify, getPaginationData } = require('../utils/helpers');
 const { uploadMultipleImages, deleteImage } = require('../services/cloudinaryService');
+const { logAudit } = require('../services/auditService');
 
 const BOOLEAN_FORM_FIELDS = [
   'isFeatured', 'isNewArrival', 'isBestSeller', 'isActive', 'eligibleForMysteryBox', 'virtualTryOn', 'isTestProduct',
@@ -195,6 +196,10 @@ exports.createProduct = async (req, res) => {
   }
 
   const product = await Product.create(data);
+  await logAudit({
+    entity: 'Product', entityId: product._id, entityName: product.name,
+    action: 'create', performedBy: req.user,
+  });
   res.status(201).json({ success: true, product });
 };
 
@@ -217,6 +222,7 @@ exports.updateProduct = async (req, res) => {
 
   const product = await Product.findById(req.params.id);
   if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
+  const oldSnapshot = product.toObject();
 
   /** Ordered existing images from admin (JSON array of { url, publicId? }) — allows reorder without re-uploading */
   let orderedExisting = null;
@@ -259,6 +265,10 @@ exports.updateProduct = async (req, res) => {
     new: true,
     runValidators: true,
   });
+  await logAudit({
+    entity: 'Product', entityId: updated._id, entityName: updated.name,
+    action: 'update', oldDoc: oldSnapshot, newDoc: updated, performedBy: req.user,
+  });
   res.json({ success: true, product: updated });
 };
 
@@ -266,10 +276,15 @@ exports.deleteProduct = async (req, res) => {
   const product = await Product.findById(req.params.id);
   if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
 
+  const { _id: productId, name: productName } = product;
   for (const image of product.images) {
     if (image.publicId) await deleteImage(image.publicId);
   }
   await product.deleteOne();
+  await logAudit({
+    entity: 'Product', entityId: productId, entityName: productName,
+    action: 'delete', performedBy: req.user,
+  });
   res.json({ success: true, message: 'Product deleted' });
 };
 

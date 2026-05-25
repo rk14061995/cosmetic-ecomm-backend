@@ -1,6 +1,7 @@
 const Category = require('../models/Category');
 const { slugify } = require('../utils/helpers');
 const { uploadImage, deleteImage } = require('../services/cloudinaryService');
+const { logAudit } = require('../services/auditService');
 const toBoolean = (value, fallback = true) => {
   if (value === undefined || value === null) return fallback;
   if (typeof value === 'boolean') return value;
@@ -51,12 +52,17 @@ exports.createCategory = async (req, res) => {
     await category.save();
   }
 
+  await logAudit({
+    entity: 'Category', entityId: category._id, entityName: category.name,
+    action: 'create', performedBy: req.user,
+  });
   res.status(201).json({ success: true, category });
 };
 
 exports.updateCategory = async (req, res) => {
   const category = await Category.findById(req.params.id);
   if (!category) return res.status(404).json({ success: false, message: 'Category not found' });
+  const oldSnapshot = category.toObject();
 
   const nextName = req.body.name ? String(req.body.name).trim() : category.name;
   if (!nextName) return res.status(400).json({ success: false, message: 'Category name is required' });
@@ -85,6 +91,10 @@ exports.updateCategory = async (req, res) => {
   }
   await category.save();
 
+  await logAudit({
+    entity: 'Category', entityId: category._id, entityName: category.name,
+    action: 'update', oldDoc: oldSnapshot, newDoc: category, performedBy: req.user,
+  });
   res.json({ success: true, category });
 };
 
@@ -97,6 +107,11 @@ exports.deleteCategory = async (req, res) => {
       await deleteImage(publicId);
     } catch (_) {}
   }
+  const { _id: categoryId, name: categoryName } = category;
   await category.deleteOne();
+  await logAudit({
+    entity: 'Category', entityId: categoryId, entityName: categoryName,
+    action: 'delete', performedBy: req.user,
+  });
   res.json({ success: true, message: 'Category deleted' });
 };
