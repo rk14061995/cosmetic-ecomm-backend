@@ -69,7 +69,7 @@ exports.getProducts = async (req, res) => {
     .sort(sortOption)
     .skip((pagination.currentPage - 1) * pagination.pageSize)
     .limit(pagination.pageSize)
-    .select('-reviews');
+    .select(isAdmin ? '-reviews' : '-reviews -buyFrom');
 
   res.json({ success: true, products, pagination });
 };
@@ -133,7 +133,10 @@ exports.getProduct = async (req, res) => {
       if (popErr.name !== 'CastError') throw popErr;
     }
 
-    return res.json({ success: true, product });
+    const productData = product.toObject();
+    if (!req.user) delete productData.buyFrom;
+
+    return res.json({ success: true, product: productData });
   } catch (err) {
     if (err.name === 'CastError') {
       return res.status(404).json({ success: false, message: 'Product not found' });
