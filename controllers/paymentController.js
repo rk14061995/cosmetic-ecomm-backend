@@ -104,7 +104,11 @@ exports.verifyPayment = async (req, res) => {
   try {
     const customer = await User.findById(req.user._id).select('email name');
     if (customer?.email) {
-      await sendInvoiceEmail(customer.email, order, customer.name);
+      await sendInvoiceEmail(customer.email, order, customer.name, {
+        method: razorpayPayment.method,
+        paymentId: razorpay_payment_id,
+        paidAt: new Date(),
+      });
     }
   } catch (emailErr) {
     console.error('[payment] Invoice email failed:', emailErr?.message || emailErr);
