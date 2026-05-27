@@ -3,7 +3,7 @@ const router = express.Router();
 const {
   register, login, logout, refreshToken, forgotPassword,
   resetPassword, getMe, updateProfile, changePassword,
-  addAddress, updateAddress, deleteAddress,
+  addAddress, updateAddress, deleteAddress, googleLogin,
   // sendOtp, verifyOtp, // MSG91 / phone OTP disabled
 } = require('../controllers/authController');
 const { protect } = require('../middleware/auth');
@@ -12,6 +12,7 @@ const { authLimiter } = require('../middleware/rateLimiter');
 
 router.post('/register', authLimiter, validate(registerSchema), register);
 router.post('/login', authLimiter, validate(loginSchema), login);
+router.post('/google', authLimiter, googleLogin);
 // MSG91 / phone OTP — routes disabled (see services/smsService.js, validators, authController).
 // router.post('/send-otp', authLimiter, validate(sendOtpSchema), sendOtp);
 // router.post('/verify-otp', authLimiter, validate(verifyOtpSchema), verifyOtp);

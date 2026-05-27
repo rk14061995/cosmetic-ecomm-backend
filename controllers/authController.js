@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
+const { OAuth2Client } = require('google-auth-library');
 const User = require('../models/User');
 const Referral = require('../models/Referral');
 // const OtpVerification = require('../models/OtpVerification');
@@ -21,10 +22,14 @@ const sendTokenResponse = (user, statusCode, res) => {
       _id: user._id,
       name: user.name,
       email: user.email,
+      phone: user.phone || '',
       role: user.role,
       avatar: user.avatar,
       wallet: user.wallet,
       referralCode: user.referralCode,
+      loyaltyPoints: user.loyaltyPoints ?? 0,
+      loyaltyTier: user.loyaltyTier || 'Bronze',
+      addresses: user.addresses || [],
     },
   });
 };
@@ -201,4 +206,30 @@ exports.deleteAddress = async (req, res) => {
   user.addresses = user.addresses.filter((a) => a._id.toString() !== req.params.addressId);
   await user.save();
   res.json({ success: true, addresses: user.addresses });
+};
+
+exports.googleLogin = async (req, res) => {
+  const { credential } = req.body;
+  if (!credential) return res.status(400).json({ success: false, message: 'Google credential missing' });
+
+  const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+  const ticket = await client.verifyIdToken({
+    idToken: credential,
+    audience: process.env.GOOGLE_CLIENT_ID,
+  });
+  const { sub: googleId, email, name, picture } = ticket.getPayload();
+
+  let user = await User.findOne({ $or: [{ googleId }, { email }] });
+  if (user) {
+    if (!user.googleId) {
+      user.googleId = googleId;
+      if (picture && !user.avatar) user.avatar = picture;
+      await user.save({ validateBeforeSave: false });
+    }
+    if (user.isBlocked) return res.status(403).json({ success: false, message: 'Your account has been blocked' });
+  } else {
+    user = await User.create({ name, email, googleId, avatar: picture || '' });
+  }
+
+  sendTokenResponse(user, 200, res);
 };
