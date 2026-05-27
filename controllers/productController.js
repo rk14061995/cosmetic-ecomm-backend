@@ -38,8 +38,8 @@ exports.getProducts = async (req, res) => {
     bestSeller,
     includeInactive,
   } = req.query;
-  const isAdmin = Boolean(req.user);
-  const query = includeInactive === 'true' ? {} : { isActive: true };
+  const isAdmin = req.user?.role === 'admin';
+  const query = includeInactive === 'true' && isAdmin ? {} : { isActive: true };
   if (!isAdmin) query.isTestProduct = { $ne: true };
 
   if (category) query.category = category;
@@ -122,8 +122,8 @@ exports.getProduct = async (req, res) => {
 
     if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
 
-    // Test products are only accessible to authenticated (admin) users
-    if (product.isTestProduct && !req.user) {
+    // Test products are only accessible to admin users
+    if (product.isTestProduct && req.user?.role !== 'admin') {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
 
@@ -160,7 +160,7 @@ exports.getProductStats = async (req, res) => {
 };
 
 exports.getFeaturedProducts = async (req, res) => {
-  const products = await Product.find({ isFeatured: true, isActive: true })
+  const products = await Product.find({ isFeatured: true, isActive: true, isTestProduct: { $ne: true } })
     .limit(8)
     .select('-reviews');
   res.json({ success: true, products });
