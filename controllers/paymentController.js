@@ -2,7 +2,9 @@ const crypto = require('crypto');
 const razorpay = require('../config/razorpay');
 const Order = require('../models/Order');
 const Payment = require('../models/Payment');
+const User = require('../models/User');
 const { buildInvoiceNumber } = require('../services/invoiceService');
+const { sendInvoiceEmail } = require('../services/emailService');
 
 exports.createRazorpayOrder = async (req, res) => {
   const { orderId } = req.body;
@@ -96,6 +98,16 @@ exports.verifyPayment = async (req, res) => {
         $inc: { stock: -item.quantity },
       });
     }
+  }
+
+  // Send invoice email (non-blocking — failure must not break the payment flow)
+  try {
+    const customer = await User.findById(req.user._id).select('email name');
+    if (customer?.email) {
+      await sendInvoiceEmail(customer.email, order, customer.name);
+    }
+  } catch (emailErr) {
+    console.error('[payment] Invoice email failed:', emailErr?.message || emailErr);
   }
 
   res.json({ success: true, message: 'Payment verified successfully', order });
