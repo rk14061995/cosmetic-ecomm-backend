@@ -28,6 +28,8 @@ const userSchema = new mongoose.Schema(
     phone: { type: String, trim: true },
     avatar: { type: String, default: '' },
     role: { type: String, enum: ['user', 'admin'], default: 'user' },
+    // null/undefined = super-admin (full access); array = restricted to listed permissions
+    adminPermissions: { type: [String], default: undefined },
     isBlocked: { type: Boolean, default: false },
     addresses: [addressSchema],
     wishlist: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Product' }],

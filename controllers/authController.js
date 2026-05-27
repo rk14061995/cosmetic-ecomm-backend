@@ -30,6 +30,8 @@ const sendTokenResponse = (user, statusCode, res) => {
       loyaltyPoints: user.loyaltyPoints ?? 0,
       loyaltyTier: user.loyaltyTier || 'Bronze',
       addresses: user.addresses || [],
+      // null = super-admin (full access); array = restricted permissions
+      adminPermissions: user.adminPermissions ?? null,
     },
   });
 };

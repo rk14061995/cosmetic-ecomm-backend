@@ -84,6 +84,64 @@ exports.getAllReferrals = async (req, res) => {
   res.json({ success: true, referrals });
 };
 
+/** List all admin users with their permission assignments (super-admin only). */
+exports.getAdminUsers = async (req, res) => {
+  const admins = await User.find({ role: 'admin' })
+    .select('_id name email adminPermissions createdAt')
+    .sort({ createdAt: 1 });
+  res.json({ success: true, admins });
+};
+
+/**
+ * Promote a user to admin or demote admin to user.
+ * Only a super-admin (adminPermissions == null) can call this.
+ * Cannot demote yourself.
+ */
+exports.setAdminRole = async (req, res) => {
+  const { role } = req.body; // 'admin' | 'user'
+  if (!['admin', 'user'].includes(role))
+    return res.status(400).json({ success: false, message: 'role must be "admin" or "user"' });
+
+  if (req.params.id === String(req.user._id))
+    return res.status(400).json({ success: false, message: 'You cannot change your own role' });
+
+  const target = await User.findById(req.params.id);
+  if (!target) return res.status(404).json({ success: false, message: 'User not found' });
+
+  target.role = role;
+  // Demoting removes permissions; promoting starts with full access (null)
+  if (role === 'user') target.adminPermissions = undefined;
+  await target.save({ validateBeforeSave: false });
+
+  res.json({ success: true, message: role === 'admin' ? 'User promoted to admin' : 'Admin demoted to user' });
+};
+
+/**
+ * Set the adminPermissions array for an admin user.
+ * Pass null to grant super-admin (full) access.
+ * Only callable by a super-admin.
+ */
+exports.updateAdminPermissions = async (req, res) => {
+  const { permissions } = req.body; // string[] | null
+
+  if (req.params.id === String(req.user._id))
+    return res.status(400).json({ success: false, message: 'You cannot change your own permissions' });
+
+  const target = await User.findById(req.params.id);
+  if (!target) return res.status(404).json({ success: false, message: 'User not found' });
+  if (target.role !== 'admin') return res.status(400).json({ success: false, message: 'User is not an admin' });
+
+  // null → super-admin; array → restricted
+  target.adminPermissions = permissions == null ? undefined : permissions;
+  await target.save({ validateBeforeSave: false });
+
+  res.json({
+    success: true,
+    message: 'Permissions updated',
+    adminPermissions: target.adminPermissions ?? null,
+  });
+};
+
 /** Signups grouped by first-touch acquisition source (admin). */
 exports.getAcquisitionStats = async (req, res) => {
   const rows = await User.aggregate([

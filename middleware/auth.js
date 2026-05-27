@@ -47,8 +47,21 @@ exports.optionalProtect = async (req, res, next) => {
 };
 
 exports.adminOnly = (req, res, next) => {
-  // Mobile-first single-operator mode: any authenticated user can access admin APIs.
-  // Keep this enabled only when you intentionally want app-only admin access.
-  if (req.user) return next();
-  return res.status(403).json({ success: false, message: 'Admin access required' });
+  if (!req.user) return res.status(401).json({ success: false, message: 'Not authorized' });
+  if (req.user.role !== 'admin') return res.status(403).json({ success: false, message: 'Admin access required' });
+  next();
+};
+
+/**
+ * Check that the logged-in admin has a specific permission.
+ * Super-admins (adminPermissions == null/undefined) always pass.
+ * Usage: requirePermission('products')
+ */
+exports.requirePermission = (permission) => (req, res, next) => {
+  if (!req.user) return res.status(401).json({ success: false, message: 'Not authorized' });
+  if (req.user.role !== 'admin') return res.status(403).json({ success: false, message: 'Admin access required' });
+  // null / undefined means super-admin → full access
+  if (req.user.adminPermissions == null) return next();
+  if (req.user.adminPermissions.includes(permission)) return next();
+  return res.status(403).json({ success: false, message: `Permission denied: requires '${permission}'` });
 };
