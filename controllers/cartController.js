@@ -2,6 +2,7 @@ const Cart = require('../models/Cart');
 const Product = require('../models/Product');
 const MysteryBox = require('../models/MysteryBox');
 const Coupon = require('../models/Coupon');
+const logEvent = require('../utils/logEvent');
 
 const FREE_SHIPPING_THRESHOLD = 500;
 const SHIPPING_FLAT = 50;
@@ -102,6 +103,7 @@ exports.addToCart = async (req, res) => {
   }
 
   await cart.save();
+  if (req.user.role !== 'admin') logEvent(req.user._id, 'cart_add', { name, quantity, price, itemType });
 
   const payload = await cartPayloadForUser(req.user._id);
   res.json({
@@ -130,8 +132,10 @@ exports.updateCartItem = async (req, res) => {
     }
   }
 
+  const prevQty = line.quantity;
   line.quantity = quantity;
   await cart.save();
+  if (req.user.role !== 'admin') logEvent(req.user._id, 'cart_update', { name: line.name, fromQty: prevQty, toQty: quantity });
 
   const payload = await cartPayloadForUser(req.user._id);
   res.json({
@@ -146,8 +150,10 @@ exports.updateCartItem = async (req, res) => {
 exports.removeCartItem = async (req, res) => {
   const cart = await Cart.findOne({ user: req.user._id });
   if (!cart) return res.status(404).json({ success: false, message: 'Cart not found' });
+  const removedItem = cart.items.find((item) => item._id.toString() === req.params.itemId);
   cart.items = cart.items.filter((item) => item._id.toString() !== req.params.itemId);
   await cart.save();
+  if (removedItem && req.user.role !== 'admin') logEvent(req.user._id, 'cart_remove', { name: removedItem.name, quantity: removedItem.quantity });
 
   const payload = await cartPayloadForUser(req.user._id);
   res.json({
@@ -160,7 +166,10 @@ exports.removeCartItem = async (req, res) => {
 };
 
 exports.clearCart = async (req, res) => {
+  const cartToCount = await Cart.findOne({ user: req.user._id });
+  const itemCount = cartToCount?.items?.length || 0;
   await Cart.findOneAndUpdate({ user: req.user._id }, { items: [], coupon: null, couponCode: null });
+  if (req.user.role !== 'admin') logEvent(req.user._id, 'cart_cleared', { itemCount });
   const payload = await cartPayloadForUser(req.user._id);
   res.json({
     success: true,
@@ -198,6 +207,7 @@ exports.applyCoupon = async (req, res) => {
   cart.coupon = coupon._id;
   cart.couponCode = code.toUpperCase();
   await cart.save();
+  if (req.user.role !== 'admin') logEvent(req.user._id, 'coupon_applied', { code: code.toUpperCase(), discount });
 
   const payload = await cartPayloadForUser(req.user._id);
   res.json({
@@ -212,7 +222,10 @@ exports.applyCoupon = async (req, res) => {
 };
 
 exports.removeCoupon = async (req, res) => {
+  const cartForCode = await Cart.findOne({ user: req.user._id });
+  const removedCode = cartForCode?.couponCode;
   await Cart.findOneAndUpdate({ user: req.user._id }, { coupon: null, couponCode: null });
+  if (req.user.role !== 'admin') logEvent(req.user._id, 'coupon_removed', { code: removedCode });
   const payload = await cartPayloadForUser(req.user._id);
   res.json({
     success: true,
@@ -221,4 +234,9 @@ exports.removeCoupon = async (req, res) => {
     summary: payload.summary,
     cartCount: cartLineCount(payload.cart),
   });
+};
+
+exports.getAdminUserCart = async (req, res) => {
+  const { cart, summary } = await cartPayloadForUser(req.params.userId);
+  res.json({ success: true, cart, summary });
 };

@@ -14,11 +14,12 @@ function getTransporter() {
 }
 
 /* ─── Constants ───────────────────────────────────────────────────────────── */
-const SITE_NAME    = process.env.SITE_NAME    || 'KosmeticX';
-const SITE_URL     = process.env.FRONTEND_URL  || 'http://localhost:3000';
-const FROM_EMAIL   = process.env.EMAIL_FROM   || process.env.EMAIL_USER || 'noreply@kosmeticx.com';
-const PRIMARY      = '#4f46e5';   // indigo-600
-const PRIMARY_DARK = '#7c3aed';   // violet-600
+const SITE_NAME          = process.env.SITE_NAME          || 'KosmeticX';
+const SITE_URL           = process.env.FRONTEND_URL        || 'http://localhost:3000';
+const FROM_EMAIL         = process.env.EMAIL_FROM         || process.env.EMAIL_USER || 'noreply@kosmeticx.com';
+const ADMIN_NOTIFY_EMAIL = process.env.ADMIN_NOTIFY_EMAIL || 'kosmeticxglow@gmail.com';
+const PRIMARY            = '#4f46e5';   // indigo-600
+const PRIMARY_DARK       = '#7c3aed';   // violet-600
 
 /* ─── Helpers ─────────────────────────────────────────────────────────────── */
 function fmt(n) { return `₹${Number(n || 0).toFixed(2)}`; }
@@ -529,6 +530,174 @@ exports.sendOrderStatusEmail = async (email, order, status, userName) => {
     to: email,
     subject: `${emoji} ${SITE_NAME} order ${label} — ${status}`,
     html: wrapLayout(body),
+  });
+};
+
+/* ── Fetch live notification emails from DB, fall back to env constant ───── */
+async function getAdminEmails() {
+  try {
+    const NotificationSettings = require('../models/NotificationSettings');
+    const settings = await NotificationSettings.findOne();
+    if (settings && settings.emails.length > 0) return settings.emails;
+  } catch (_) {}
+  return [ADMIN_NOTIFY_EMAIL];
+}
+
+/* ── Admin: new user registered ─────────────────────────────────────────── */
+exports.sendAdminNewUserEmail = async (user) => {
+  const body = `
+    <div style="text-align:center;margin-bottom:24px;">
+      <div style="display:inline-block;font-size:48px;margin-bottom:12px;">👤</div>
+      <h1 style="font-size:22px;font-weight:800;color:#111827;margin:0 0 8px;">
+        New User Registered
+      </h1>
+      <p style="font-size:14px;color:#6b7280;margin:0;">
+        A new customer just signed up on ${SITE_NAME}.
+      </p>
+    </div>
+
+    <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;
+                padding:20px;margin-bottom:24px;">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="padding:6px 0;font-size:13px;color:#6b7280;width:40%;">Name</td>
+          <td style="padding:6px 0;font-size:13px;font-weight:700;color:#111827;">${user.name || '—'}</td>
+        </tr>
+        <tr>
+          <td style="padding:6px 0;font-size:13px;color:#6b7280;">Email</td>
+          <td style="padding:6px 0;font-size:13px;font-weight:700;color:#111827;">${user.email || '—'}</td>
+        </tr>
+        ${user.phone ? `
+        <tr>
+          <td style="padding:6px 0;font-size:13px;color:#6b7280;">Phone</td>
+          <td style="padding:6px 0;font-size:13px;font-weight:700;color:#111827;">${user.phone}</td>
+        </tr>` : ''}
+        <tr>
+          <td style="padding:6px 0;font-size:13px;color:#6b7280;">Source</td>
+          <td style="padding:6px 0;font-size:13px;font-weight:700;color:#111827;text-transform:capitalize;">
+            ${user.acquisitionSource || 'direct'}
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:6px 0;font-size:13px;color:#6b7280;">Registered</td>
+          <td style="padding:6px 0;font-size:13px;font-weight:700;color:#111827;">
+            ${fmtDateTime(user.createdAt || new Date())}
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    ${emailButton(`${SITE_URL}/admin/users/${user._id}`, 'View User in Admin →')}`;
+
+  const adminEmails = await getAdminEmails();
+  await sendEmail({
+    to: adminEmails.join(', '),
+    subject: `👤 New signup: ${user.name || user.email} — ${SITE_NAME}`,
+    html: wrapLayout(body, `New user registered: ${user.email}`),
+  });
+};
+
+/* ── Admin: new order placed ────────────────────────────────────────────── */
+exports.sendAdminNewOrderEmail = async (order, customerName, customerEmail) => {
+  const label = publicOrderLabel(order);
+  const addr  = order.shippingAddress || {};
+
+  const itemRows = (order.orderItems || []).map((item) => `
+    <tr>
+      <td style="padding:10px 8px;border-bottom:1px solid #f3f4f6;font-size:13px;color:#374151;">
+        ${item.name}
+      </td>
+      <td style="padding:10px 8px;border-bottom:1px solid #f3f4f6;font-size:13px;
+                 color:#6b7280;text-align:center;">${item.quantity}</td>
+      <td style="padding:10px 8px;border-bottom:1px solid #f3f4f6;font-size:13px;
+                 font-weight:700;color:#111827;text-align:right;">
+        ${fmt(item.price * item.quantity)}
+      </td>
+    </tr>`).join('');
+
+  const body = `
+    <div style="text-align:center;margin-bottom:24px;">
+      <div style="display:inline-block;font-size:48px;margin-bottom:12px;">🛍️</div>
+      <h1 style="font-size:22px;font-weight:800;color:#111827;margin:0 0 8px;">
+        New Order Placed
+      </h1>
+      <p style="font-size:14px;color:#6b7280;margin:0;">
+        Order <strong>${label}</strong> just came in.
+      </p>
+    </div>
+
+    <!-- Order meta -->
+    <table width="100%" cellpadding="0" cellspacing="0"
+           style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;margin-bottom:20px;">
+      <tr>
+        <td style="padding:14px 16px;border-right:1px solid #e5e7eb;width:33%;">
+          <p style="font-size:10px;color:#9ca3af;text-transform:uppercase;
+                    letter-spacing:0.08em;margin:0 0 4px;">Order</p>
+          <p style="font-size:15px;font-weight:800;color:#111827;margin:0;">${label}</p>
+        </td>
+        <td style="padding:14px 16px;border-right:1px solid #e5e7eb;width:33%;">
+          <p style="font-size:10px;color:#9ca3af;text-transform:uppercase;
+                    letter-spacing:0.08em;margin:0 0 4px;">Total</p>
+          <p style="font-size:15px;font-weight:800;color:${PRIMARY};margin:0;">${fmt(order.totalPrice)}</p>
+        </td>
+        <td style="padding:14px 16px;width:33%;">
+          <p style="font-size:10px;color:#9ca3af;text-transform:uppercase;
+                    letter-spacing:0.08em;margin:0 0 4px;">Payment</p>
+          <p style="font-size:13px;font-weight:700;color:#111827;margin:0;">
+            ${fmtPaymentMethod(order.paymentMethod)}
+          </p>
+        </td>
+      </tr>
+    </table>
+
+    <!-- Customer -->
+    <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;
+                padding:16px 20px;margin-bottom:20px;">
+      <p style="font-size:10px;color:#9ca3af;text-transform:uppercase;
+                letter-spacing:0.1em;margin:0 0 10px;font-weight:700;">👤 Customer</p>
+      <p style="font-size:14px;font-weight:700;color:#111827;margin:0 0 3px;">${customerName || '—'}</p>
+      <p style="font-size:13px;color:#6b7280;margin:0;">${customerEmail || '—'}</p>
+    </div>
+
+    <!-- Items -->
+    <table width="100%" cellpadding="0" cellspacing="0"
+           style="border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;margin-bottom:20px;">
+      <thead>
+        <tr style="background:#f9fafb;">
+          <th style="padding:9px 8px;font-size:11px;font-weight:700;text-transform:uppercase;
+                     letter-spacing:0.06em;color:#6b7280;text-align:left;">Item</th>
+          <th style="padding:9px 8px;font-size:11px;font-weight:700;text-transform:uppercase;
+                     letter-spacing:0.06em;color:#6b7280;text-align:center;">Qty</th>
+          <th style="padding:9px 8px;font-size:11px;font-weight:700;text-transform:uppercase;
+                     letter-spacing:0.06em;color:#6b7280;text-align:right;">Total</th>
+        </tr>
+      </thead>
+      <tbody>${itemRows}</tbody>
+    </table>
+
+    <!-- Shipping address -->
+    ${addr.addressLine1 ? `
+    <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;
+                padding:16px 20px;margin-bottom:24px;">
+      <p style="font-size:10px;color:#9ca3af;text-transform:uppercase;
+                letter-spacing:0.1em;margin:0 0 8px;font-weight:700;">📍 Ship To</p>
+      <p style="font-size:14px;font-weight:700;color:#111827;margin:0 0 3px;">${addr.fullName || ''}</p>
+      <p style="font-size:13px;color:#6b7280;margin:0 0 2px;">
+        ${addr.addressLine1}${addr.addressLine2 ? ', ' + addr.addressLine2 : ''}
+      </p>
+      <p style="font-size:13px;color:#6b7280;margin:0;">
+        ${addr.city}, ${addr.state} — ${addr.pincode}
+      </p>
+      ${addr.phone ? `<p style="font-size:13px;color:#6b7280;margin:4px 0 0;">📞 ${addr.phone}</p>` : ''}
+    </div>` : ''}
+
+    ${emailButton(`${SITE_URL}/admin/orders`, 'View in Admin Panel →')}`;
+
+  const adminEmails = await getAdminEmails();
+  await sendEmail({
+    to: adminEmails.join(', '),
+    subject: `🛍️ New order ${label} — ${fmt(order.totalPrice)} — ${SITE_NAME}`,
+    html: wrapLayout(body, `New order ${label} placed by ${customerName}`),
   });
 };
 

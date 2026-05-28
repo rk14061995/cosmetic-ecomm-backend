@@ -6,7 +6,7 @@ const Referral = require('../models/Referral');
 // const OtpVerification = require('../models/OtpVerification');
 const { generateTokens, generateResetToken } = require('../utils/helpers');
 const { pickAttributionFields } = require('../utils/attribution');
-const { sendPasswordResetEmail } = require('../services/emailService');
+const { sendPasswordResetEmail, sendAdminNewUserEmail } = require('../services/emailService');
 // const { sendOtpSms, normalizeIndianMobile, OTP_EXPIRY_MINUTES } = require('../services/smsService');
 
 const sendTokenResponse = (user, statusCode, res) => {
@@ -65,6 +65,7 @@ exports.register = async (req, res) => {
     }
   }
 
+  sendAdminNewUserEmail(user).catch(() => {});
   sendTokenResponse(user, 201, res);
 };
 
@@ -231,6 +232,7 @@ exports.googleLogin = async (req, res) => {
     if (user.isBlocked) return res.status(403).json({ success: false, message: 'Your account has been blocked' });
   } else {
     user = await User.create({ name, email, googleId, avatar: picture || '' });
+    sendAdminNewUserEmail(user).catch(() => {});
   }
 
   sendTokenResponse(user, 200, res);

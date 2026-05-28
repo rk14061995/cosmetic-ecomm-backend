@@ -171,3 +171,73 @@ exports.getAcquisitionStats = async (req, res) => {
     stats: rows.map((r) => ({ source: r._id, count: r.count })),
   });
 };
+
+exports.getNotificationEmails = async (req, res) => {
+  const NotificationSettings = require('../models/NotificationSettings');
+  let settings = await NotificationSettings.findOne();
+  if (!settings) {
+    settings = await NotificationSettings.create({
+      emails: [process.env.ADMIN_NOTIFY_EMAIL || 'kosmeticxglow@gmail.com'],
+    });
+  }
+  res.json({ success: true, emails: settings.emails });
+};
+
+exports.updateNotificationEmails = async (req, res) => {
+  const NotificationSettings = require('../models/NotificationSettings');
+  const valid = (req.body.emails || [])
+    .map((e) => String(e).trim().toLowerCase())
+    .filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+
+  let settings = await NotificationSettings.findOne();
+  if (!settings) {
+    settings = await NotificationSettings.create({ emails: valid });
+  } else {
+    settings.emails = valid;
+    await settings.save();
+  }
+  res.json({ success: true, emails: settings.emails });
+};
+
+exports.impersonateUser = async (req, res) => {
+  if (req.user.adminPermissions != null) {
+    return res.status(403).json({ success: false, message: 'Super-admin access required' });
+  }
+  const { generateTokens } = require('../utils/helpers');
+  const target = await User.findById(req.params.id).select('-password');
+  if (!target) return res.status(404).json({ success: false, message: 'User not found' });
+  if (target.role === 'admin') {
+    return res.status(400).json({ success: false, message: 'Cannot impersonate an admin account' });
+  }
+  const { accessToken, refreshToken } = generateTokens(target._id);
+  res.json({
+    success: true,
+    accessToken,
+    refreshToken,
+    user: { _id: target._id, name: target.name, email: target.email },
+  });
+};
+
+exports.getUserEvents = async (req, res) => {
+  const UserEvent = require('../models/UserEvent');
+  const { page = 1, limit = 30 } = req.query;
+  const skip = (Number(page) - 1) * Number(limit);
+  const [events, total] = await Promise.all([
+    UserEvent.find({ user: req.params.id }).sort({ createdAt: -1 }).skip(skip).limit(Number(limit)),
+    UserEvent.countDocuments({ user: req.params.id }),
+  ]);
+  res.json({
+    success: true,
+    events,
+    pagination: { total, page: Number(page), totalPages: Math.ceil(total / Number(limit)) },
+  });
+};
+
+exports.getUserOrders = async (req, res) => {
+  const { limit = 10 } = req.query;
+  const orders = await Order.find({ user: req.params.id })
+    .sort({ createdAt: -1 })
+    .limit(Number(limit))
+    .select('orderNumber orderStatus totalPrice orderItems paymentMethod createdAt isPaid');
+  res.json({ success: true, orders });
+};

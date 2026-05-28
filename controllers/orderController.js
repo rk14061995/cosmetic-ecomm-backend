@@ -3,11 +3,12 @@ const Product = require('../models/Product');
 const MysteryBox = require('../models/MysteryBox');
 const Coupon = require('../models/Coupon');
 const Referral = require('../models/Referral');
+const logEvent = require('../utils/logEvent');
 const User = require('../models/User');
 const Cart = require('../models/Cart');
 const { calculateShipping, getPaginationData } = require('../utils/helpers');
 const { buildOrderIdFilter } = require('../utils/orderLookup');
-const { sendOrderConfirmationEmail, sendOrderStatusEmail } = require('../services/emailService');
+const { sendOrderConfirmationEmail, sendOrderStatusEmail, sendAdminNewOrderEmail } = require('../services/emailService');
 const { allocateProducts, deductInventory } = require('../services/mysteryBoxService');
 const { buildInvoiceNumber } = require('../services/invoiceService');
 
@@ -109,6 +110,7 @@ exports.createOrder = async (req, res) => {
     couponCode: couponCode?.toUpperCase(),
     statusHistory: [{ status: 'Pending', note: 'Order placed' }],
   });
+  if (req.user.role !== 'admin') logEvent(req.user._id, 'order_placed', { orderId: order._id, total: totalPrice, itemCount: orderItems.length, paymentMethod });
 
   if (actualWalletUsed > 0) {
     await User.findByIdAndUpdate(req.user._id, { $inc: { wallet: -actualWalletUsed } });
@@ -151,6 +153,8 @@ exports.createOrder = async (req, res) => {
   try {
     await sendOrderConfirmationEmail(req.user.email, order);
   } catch {}
+
+  sendAdminNewOrderEmail(order, req.user.name, req.user.email).catch(() => {});
 
   res.status(201).json({ success: true, order });
 };

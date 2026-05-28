@@ -2,11 +2,13 @@ const express = require('express');
 const router = express.Router();
 const {
   getCart, addToCart, updateCartItem, removeCartItem,
-  clearCart, applyCoupon, removeCoupon,
+  clearCart, applyCoupon, removeCoupon, getAdminUserCart,
 } = require('../controllers/cartController');
-const { protect } = require('../middleware/auth');
+const { protect, adminOnly } = require('../middleware/auth');
 
 router.use(protect);
+
+router.get('/admin/:userId', adminOnly, getAdminUserCart);
 
 router.get('/', getCart);
 router.post('/add', addToCart);
