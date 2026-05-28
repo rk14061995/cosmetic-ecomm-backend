@@ -19,6 +19,11 @@ const couponSchema = new mongoose.Schema(
     expiryDate: { type: Date, required: true },
     isActive: { type: Boolean, default: true },
     applicableCategories: [String],
+    displayContext: {
+      type: [String],
+      enum: ['product_page', 'mystery_box', 'sale', 'cart', 'hidden'],
+      default: ['product_page'],
+    },
   },
   { timestamps: true }
 );

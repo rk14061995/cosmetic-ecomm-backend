@@ -1,5 +1,13 @@
 const Coupon = require('../models/Coupon');
 
+exports.getPublicCoupons = async (req, res) => {
+  const { context } = req.query;
+  const query = { isActive: true, expiryDate: { $gt: new Date() } };
+  if (context) query.displayContext = context;
+  const coupons = await Coupon.find(query, 'code description discountType discountValue maxDiscountAmount minOrderValue expiryDate displayContext').sort({ createdAt: -1 });
+  res.json({ success: true, coupons });
+};
+
 exports.createCoupon = async (req, res) => {
   const coupon = await Coupon.create(req.body);
   res.status(201).json({ success: true, coupon });

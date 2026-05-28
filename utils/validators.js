@@ -59,8 +59,8 @@ exports.productSchema = Joi.object({
 });
 
 exports.couponSchema = Joi.object({
-  code: Joi.string().alphanum().min(3).max(20).required(),
-  description: Joi.string().optional(),
+  code: Joi.string().trim().pattern(/^[A-Z0-9_-]+$/).min(3).max(20).required(),
+  description: Joi.string().allow('').optional(),
   discountType: Joi.string().valid('percentage', 'flat').required(),
   discountValue: Joi.number().positive().required(),
   maxDiscountAmount: Joi.number().positive().optional(),
@@ -70,6 +70,7 @@ exports.couponSchema = Joi.object({
   expiryDate: Joi.date().greater('now').required(),
   isActive: Joi.boolean().optional(),
   applicableCategories: Joi.array().items(Joi.string()).optional(),
+  displayContext: Joi.array().items(Joi.string().valid('product_page', 'mystery_box', 'sale', 'cart', 'hidden')).optional(),
 });
 
 const marketingChannel = Joi.string().valid('instagram', 'whatsapp', 'google_ads', 'web', 'other');
