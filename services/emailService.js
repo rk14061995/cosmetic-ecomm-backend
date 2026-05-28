@@ -730,3 +730,57 @@ exports.sendAbandonedCartEmail = async (email, userName, cartItems) => {
     html: wrapLayout(body),
   });
 };
+
+/* ── Marketing campaign email ───────────────────────────────────────────────── */
+/**
+ * Sends an admin-authored campaign email to a single recipient.
+ * The htmlBody is the inner content; it will be wrapped in the standard layout.
+ */
+exports.renderCampaignHtml = function ({ htmlBody = '', previewText = '', userName = '' }) {
+  const greeting = userName
+    ? `<p style="font-size:14px;color:#6b7280;margin:0 0 20px;">Hi <strong>${userName}</strong>,</p>`
+    : '';
+  const body = `${greeting}${htmlBody}
+    <p style="font-size:11px;color:#9ca3af;text-align:center;margin-top:32px;">
+      You received this email because you have an account with ${SITE_NAME}.
+      <a href="mailto:${FROM_EMAIL}?subject=unsubscribe" style="color:${PRIMARY};text-decoration:none;">Unsubscribe</a>
+    </p>`;
+  return wrapLayout(body, previewText);
+};
+
+exports.sendCampaignEmail = async ({ to, subject, previewText = '', htmlBody, userName, cartItems }) => {
+  const greeting = userName
+    ? `<p style="font-size:14px;color:#6b7280;margin:0 0 20px;">Hi <strong>${userName}</strong>,</p>`
+    : '';
+
+  let cartSection = '';
+  if (cartItems?.length) {
+    const rows = cartItems.map((i) => `
+      <tr>
+        <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;">
+          <span style="font-size:13px;color:#374151;">${i.name}</span>
+          <span style="font-size:12px;color:#9ca3af;"> × ${i.quantity}</span>
+        </td>
+        <td style="padding:8px 0;border-bottom:1px solid #f3f4f6;text-align:right;font-size:13px;color:#374151;">
+          ₹${Number(i.price * i.quantity).toFixed(0)}
+        </td>
+      </tr>`).join('');
+    cartSection = `
+      <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin:20px 0;">
+        <p style="font-size:13px;font-weight:700;color:#111827;margin:0 0 12px;">Your cart</p>
+        <table width="100%" cellpadding="0" cellspacing="0">${rows}</table>
+      </div>
+      ${emailButton(`${SITE_URL}/cart`, 'Complete My Purchase →')}`;
+  }
+
+  const body = `${greeting}${htmlBody}${cartSection}
+    <p style="font-size:11px;color:#9ca3af;text-align:center;margin-top:32px;">
+      You received this email because you have an account with ${SITE_NAME}.
+      <a href="mailto:${FROM_EMAIL}?subject=unsubscribe" style="color:${PRIMARY};text-decoration:none;">Unsubscribe</a>
+    </p>`;
+  await sendEmail({
+    to,
+    subject,
+    html: wrapLayout(body, previewText),
+  });
+};

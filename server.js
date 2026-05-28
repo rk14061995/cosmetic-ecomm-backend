@@ -140,11 +140,21 @@ app.use('/api/expenses', require('./routes/expenses'));
 app.use('/api/employees', require('./routes/employees'));
 app.use('/api/refunds', require('./routes/refunds'));
 app.use('/api/audit', require('./routes/audit'));
+app.use('/api/announcement-banners', require('./routes/announcementBanners'));
+app.use('/api/campaigns', require('./routes/campaigns'));
 
 app.use((req, res) => res.status(404).json({ success: false, message: 'Route not found' }));
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT} in ${process.env.NODE_ENV} mode`));
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
+
+  // Check for scheduled campaigns every 60 seconds
+  const { runScheduledCampaigns } = require('./controllers/campaignController');
+  setInterval(() => {
+    runScheduledCampaigns().catch((err) => console.error('[Scheduler] Campaign error:', err.message));
+  }, 60 * 1000);
+});
 
 module.exports = app;
