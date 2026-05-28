@@ -191,7 +191,12 @@ exports.createProduct = async (req, res) => {
     }
   }
 
-  if (req.files && req.files.length > 0) {
+  if (req.body.newUploadedImagesJson) {
+    try {
+      const imgs = JSON.parse(req.body.newUploadedImagesJson);
+      if (Array.isArray(imgs) && imgs.length > 0) data.images = imgs;
+    } catch (_) {}
+  } else if (req.files && req.files.length > 0) {
     data.images = await uploadMultipleImages(req.files, 'cosmetic_web/products');
   }
 
@@ -244,14 +249,20 @@ exports.updateProduct = async (req, res) => {
     data.images = orderedExisting;
   }
 
-  if (req.files && req.files.length > 0) {
+  if (req.body.newUploadedImagesJson) {
+    try {
+      const newImages = JSON.parse(req.body.newUploadedImagesJson);
+      if (Array.isArray(newImages) && newImages.length > 0) {
+        const base = data.images !== undefined ? data.images : (product.images || []);
+        data.images = [...base, ...newImages];
+      }
+    } catch (_) {}
+  } else if (req.files && req.files.length > 0) {
     const newImages = await uploadMultipleImages(req.files, 'cosmetic_web/products');
     if (shouldReplaceImages) {
       for (const image of product.images || []) {
         if (image.publicId) {
-          try {
-            await deleteImage(image.publicId);
-          } catch (_) {}
+          try { await deleteImage(image.publicId); } catch (_) {}
         }
       }
       data.images = newImages;

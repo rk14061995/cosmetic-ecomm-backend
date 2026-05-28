@@ -115,6 +115,7 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Dat
 
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/products', require('./routes/products'));
+app.use('/api/upload', require('./routes/upload'));
 app.use('/api/brands', require('./routes/brands'));
 app.use('/api/reels', require('./routes/reels'));
 app.use('/api/categories', require('./routes/categories'));
