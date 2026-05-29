@@ -13,10 +13,19 @@ const { allocateProducts, deductInventory } = require('../services/mysteryBoxSer
 const { buildInvoiceNumber } = require('../services/invoiceService');
 
 const Expense = require('../models/Expense');
+const StoreSettings = require('../models/StoreSettings');
 
 const CANCEL_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 exports.createOrder = async (req, res) => {
+  const storeSettings = await StoreSettings.getSingleton();
+  if (!storeSettings.acceptingOrders) {
+    return res.status(503).json({
+      success: false,
+      message: storeSettings.pauseMessage || 'We are currently not accepting new orders. Please check back soon.',
+    });
+  }
+
   const { shippingAddress, paymentMethod, couponCode, walletAmountUsed = 0, pointsToRedeem = 0 } = req.body;
 
   const cart = await Cart.findOne({ user: req.user._id }).populate('items.product').populate('items.mysteryBox');

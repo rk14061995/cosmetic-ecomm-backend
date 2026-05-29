@@ -142,6 +142,7 @@ app.use('/api/refunds', require('./routes/refunds'));
 app.use('/api/audit', require('./routes/audit'));
 app.use('/api/announcement-banners', require('./routes/announcementBanners'));
 app.use('/api/campaigns', require('./routes/campaigns'));
+app.use('/api/store-settings', require('./routes/storeSettings'));
 
 app.use((req, res) => res.status(404).json({ success: false, message: 'Route not found' }));
 app.use(errorHandler);
